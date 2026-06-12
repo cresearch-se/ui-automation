@@ -12,6 +12,26 @@ same staging API, `appstaging.cornerstone.com`).
 - **Language:** TypeScript, `@playwright/test` runner
 - **Node:** v24 / npm 11
 - **Browser:** Chromium (installed at `~/.cache/ms-playwright/`)
+- **Deps:** `@playwright/test ^1.60.0`, `@types/node ^25.9.3` (devDependencies only; `package.json` has no `scripts`)
+
+---
+
+## Current State (verified 2026-06-12)
+
+The repo is still at the **bare scaffold stage** — the planner → generator → healer loop has not yet
+produced any real plans or tests.
+
+- **Git:** single commit `c3ceee8 "Initial commit: Playwright UI test suite scaffold"`, branch `main`, clean tree.
+- **`specs/`** — only `README.md` (placeholder). No test plans written yet.
+- **`tests/`** — only scaffold files:
+  - `example.spec.ts` — Playwright's default demo (hits `https://playwright.dev/`; safe to delete).
+  - `seed.spec.ts` — empty `Test group` > `seed` test with a `// generate code here.` stub. This is the
+    seed the agents start from; it does **not** set up auth or navigation yet.
+- **`playwright.config.ts`** — `testDir: ./tests`, `fullyParallel: true`, reporter `html`,
+  `trace: 'on-first-retry'`, one project **chromium only** (firefox/webkit/mobile/branded all commented out).
+  **`baseURL` is commented out / not set** — tests must use full URLs until it's configured.
+- **`.claude/settings.local.json`** — allows a set of git/gh/ssh Bash permissions (auth, config, add, commit, push, remote).
+- **Agents** (`.claude/agents/*.md`) — all three run on **`model: sonnet`**; planner=green, generator=blue, healer=red.
 
 ---
 
@@ -89,12 +109,39 @@ npx playwright init-agents --loop=claude
 
 ---
 
-## Conventions (fill in as the project grows)
-- **Base URL / target pages:** TODO — set `use.baseURL` in `playwright.config.ts`
-- **Auth:** UI flows that need login should seed auth in `tests/seed.spec.ts` or via the API
-  (`request` context) — do NOT reimplement the Python framework's NTLM logic; use Playwright's
-  built-in `request` fixture against the same staging API.
-- **Plans live in `specs/`, tests in `tests/`** — keep that separation.
+## Conventions
+
+### Repo layout — APP-FIRST (decided 2026-06-12)
+This repo tests **multiple separate web applications**. Everything for one app is co-located under
+`apps/<app-name>/`. Adding a new app = copy the folder shape and add one project to the config.
+
+```
+apps/
+  <app-name>/
+    specs/            — test PLANS (markdown), written by the planner agent
+    tests/            — .spec.ts files for this app
+    pages/            — Page Objects for this app (added once duplication appears)
+    auth.setup.ts     — logs into this app, saves session to playwright/.auth/<app>.json
+shared/               — cross-app helpers (api request helpers, data builders, BasePage)
+playwright/.auth/     — saved storageState per app (gitignored)
+```
+
+- **One Playwright project per app** in `playwright.config.ts`, each with its own `baseURL` and
+  `storageState`, plus a `<app>-setup` dependency project pointing at that app's `auth.setup.ts`.
+  Run a single app with `npx playwright test --project=<app-name>`.
+- **Plans → `apps/<app>/specs/`, tests → `apps/<app>/tests/`** — keep that separation per app.
+- Build incrementally: let the generator write flat self-contained specs first; refactor selectors
+  into `pages/` only after ~3–5 tests reveal the real duplication. Don't pre-build Page Objects.
+
+### Auth
+- Log in **once per app** via `apps/<app>/auth.setup.ts` → save `storageState` → every test in that
+  app's project starts authenticated. Do NOT log in inside each test.
+- For data setup, use Playwright's `request` fixture against the staging API. Do NOT reimplement the
+  Python framework's NTLM logic.
+
+### Browsers
+- Start on **Chromium** only. Microsoft Edge is available via a project with `channel: 'msedge'`
+  (currently commented out in the config) — enable per app/project when cross-browser is wanted.
 
 ---
 
