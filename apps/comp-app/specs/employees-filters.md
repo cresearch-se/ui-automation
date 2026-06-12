@@ -74,3 +74,30 @@ column, so we assert on row-count change rather than per-row value.)
 ### 7. A filter with no matches shows the empty state
 **Steps:** Choose an Office value that matches nothing → **Search**.
 **Expected:** The antd empty placeholder (`.ant-table-placeholder`, "No data") is shown; row count = 0.
+
+---
+
+## Column funnel filters (`apps/comp-app/tests/employees-column-filters.spec.ts`)
+
+Separate from the top search bar, many columns expose an antd **funnel** icon
+(`.ant-table-filter-trigger`) that opens a per-column filter dropdown. Funnel columns observed:
+Name, Title, Office, Advisor, the four Job Level columns, Job Change, Off-Cycle, the four Perf Rating
+columns, and Status.
+
+> ⚠️ Extra caveat: the funnel **dropdown internals** were not captured offline (they render in a
+> portal on click), so tests target Ant Design's **default** checkbox-menu + OK/Reset structure.
+
+### F1. Opening a column funnel shows its filter dropdown
+Click a column's funnel (Status) → the `.ant-table-filter-dropdown` opens with selectable options.
+
+### F2. Selecting a value and applying filters the column
+Open Status funnel → tick a value → **OK** → every visible row's Status cell matches; funnel shows active.
+
+### F3. Reset clears the column funnel and restores the list
+Apply a Status funnel filter (count drops) → reopen → **Reset** → funnel inactive, full list restored.
+
+### F4. Funnels on two columns combine (AND)
+Apply Status funnel, then Title funnel → rows respect both columns' selected values.
+
+### F5. A column funnel combines with a top-bar filter
+Apply an Office top-bar filter + Search, then a Status funnel → rows respect both Office and Status.

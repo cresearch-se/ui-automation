@@ -110,4 +110,55 @@ export class EmployeesPage {
     }
     return -1;
   }
+
+  // --- Per-column funnel filters ----------------------------------------------
+  // antd "column filter": a funnel icon in the header opens a dropdown (portal at <body> level)
+  // with a checkbox menu + OK/Reset buttons. NOTE: the dropdown internals were NOT captured in the
+  // offline DOM snapshot, so these target antd's DEFAULT structure — validate on first live run.
+
+  /** A column header cell located by its `aria-label`. */
+  private headerCell(headerLabel: string): Locator {
+    return this.table.locator(`.ant-table-thead th[aria-label="${headerLabel}"]`);
+  }
+
+  /** The funnel (filter) trigger inside a given column's header. */
+  columnFilterTrigger(headerLabel: string): Locator {
+    return this.headerCell(headerLabel).locator('.ant-table-filter-trigger');
+  }
+
+  /** The currently-open antd filter dropdown (rendered in a body-level portal). */
+  get filterDropdown(): Locator {
+    return this.page.locator('.ant-table-filter-dropdown:visible');
+  }
+
+  async openColumnFilter(headerLabel: string) {
+    await this.columnFilterTrigger(headerLabel).click();
+    await expect(this.filterDropdown).toBeVisible();
+  }
+
+  /** Tick one or more option labels in the open filter dropdown (antd default checkbox menu). */
+  async chooseFilterOption(...values: string[]) {
+    for (const value of values) {
+      await this.filterDropdown
+        .locator('.ant-dropdown-menu-item', { hasText: value })
+        .first()
+        .click();
+    }
+  }
+
+  /** Click OK in the open filter dropdown to apply the selection. */
+  async applyFilter() {
+    await this.filterDropdown.getByRole('button', { name: 'OK' }).click();
+  }
+
+  /** Click Reset in the open filter dropdown to clear it. */
+  async resetFilter() {
+    await this.filterDropdown.getByRole('button', { name: 'Reset' }).click();
+  }
+
+  /** Whether a column's funnel is in the active (filtered) state. */
+  async isColumnFilterActive(headerLabel: string): Promise<boolean> {
+    const cls = await this.columnFilterTrigger(headerLabel).getAttribute('class');
+    return cls?.includes('active') ?? false;
+  }
 }
