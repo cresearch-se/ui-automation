@@ -1,0 +1,113 @@
+import { type Page, type Locator, expect } from '@playwright/test';
+
+/**
+ * Page Object for the Comp App "Employees" tab and its top search-bar filters.
+ *
+ * The app is built with Ant Design (antd), so locators lean on antd's stable class structure
+ * (`.ant-select`, `.ant-table`, `.ant-checkbox-wrapper`) plus role/text locators where possible.
+ *
+ * STATUS: authored offline from a static DOM snapshot — selectors are best-effort and should be
+ * validated with a live run + healer pass once network access to the app exists.
+ */
+export class EmployeesPage {
+  readonly page: Page;
+  readonly employeesTab: Locator;
+  readonly searchRow: Locator;
+  readonly searchButton: Locator;
+  readonly clearButton: Locator;
+  readonly offCycleCheckbox: Locator;
+  readonly table: Locator;
+  readonly rows: Locator;
+  readonly emptyPlaceholder: Locator;
+
+  constructor(page: Page) {
+    this.page = page;
+    this.employeesTab = page.getByRole('tab', { name: 'Employees', exact: true });
+    this.searchRow = page.locator('.searchrow');
+    this.searchButton = page.getByRole('button', { name: 'Search' });
+    this.clearButton = page.getByRole('button', { name: 'Clear' });
+    this.offCycleCheckbox = page
+      .locator('label.ant-checkbox-wrapper', { hasText: 'Off-Cycle' })
+      .locator('input[type="checkbox"]');
+    this.table = page.locator('.ant-table');
+    this.rows = page.locator('.ant-table-tbody tr.ant-table-row');
+    this.emptyPlaceholder = page.locator('.ant-table-placeholder');
+  }
+
+  /** Navigate to the app and ensure the Employees tab is open with its table visible. */
+  async goto() {
+    await this.page.goto('/Home');
+    await this.openEmployeesTab();
+  }
+
+  async openEmployeesTab() {
+    const selected = await this.employeesTab.getAttribute('aria-selected');
+    if (selected !== 'true') {
+      await this.employeesTab.click();
+    }
+    await expect(this.table).toBeVisible();
+  }
+
+  // --- Top search-bar selects -------------------------------------------------
+
+  /** Locate a top-bar antd select by its placeholder text (e.g. "Select country"). */
+  private selectByPlaceholder(placeholder: string): Locator {
+    return this.searchRow.locator('.ant-select').filter({
+      has: this.page.locator('.ant-select-selection-placeholder', { hasText: placeholder }),
+    });
+  }
+
+  get countrySelect(): Locator { return this.selectByPlaceholder('Select country'); }
+  get officeSelect(): Locator { return this.selectByPlaceholder('Select office'); }
+  get groupSelect(): Locator { return this.selectByPlaceholder('Select group'); }
+
+  /**
+   * Open an antd select and choose one or more option labels. antd renders the option list in a
+   * portal at <body> level (`.ant-select-dropdown`), so options are located globally, not within
+   * the select. For multi-selects the dropdown stays open between picks; Escape closes it.
+   */
+  async chooseInSelect(select: Locator, values: string[]) {
+    await select.click();
+    for (const value of values) {
+      await this.page
+        .locator('.ant-select-dropdown:visible .ant-select-item-option', { hasText: value })
+        .first()
+        .click();
+    }
+    await this.page.keyboard.press('Escape');
+  }
+
+  async selectCountry(...values: string[]) { await this.chooseInSelect(this.countrySelect, values); }
+  async selectOffice(...values: string[]) { await this.chooseInSelect(this.officeSelect, values); }
+  async selectGroup(...values: string[]) { await this.chooseInSelect(this.groupSelect, values); }
+
+  async toggleOffCycle() { await this.offCycleCheckbox.click(); }
+
+  async search() { await this.searchButton.click(); }
+  async clear() { await this.clearButton.click(); }
+
+  // --- Table inspection -------------------------------------------------------
+
+  async rowCount(): Promise<number> {
+    return this.rows.count();
+  }
+
+  /** Return the text of every cell in the column whose header `aria-label` matches `headerLabel`. */
+  async columnValues(headerLabel: string): Promise<string[]> {
+    const index = await this.columnIndex(headerLabel);
+    if (index < 0) throw new Error(`Column "${headerLabel}" not found in the Employees table header`);
+    // nth-child is 1-based. NOTE: antd fixed columns can render duplicate cells; if assertions on a
+    // pinned column misbehave, the healer should scope to the non-fixed cell variant.
+    return this.rows.locator(`td:nth-child(${index + 1})`).allInnerTexts();
+  }
+
+  private async columnIndex(headerLabel: string): Promise<number> {
+    const headers = this.table.locator('.ant-table-thead th');
+    const count = await headers.count();
+    for (let i = 0; i < count; i++) {
+      const label = await headers.nth(i).getAttribute('aria-label');
+      if (label?.trim() === headerLabel) return i;
+    }
+    return -1;
+  }
+}
