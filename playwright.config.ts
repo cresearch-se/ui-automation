@@ -1,12 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Read environment variables from file.
- * https://github.com/motdotla/dotenv
+ * App credentials (e.g. COMP_APP_USERNAME / COMP_APP_PASSWORD — see apps/comp-app/auth.setup.ts)
+ * are read from the environment. Either export them as real env vars, or install dotenv
+ * (`npm i -D dotenv`) and add `import 'dotenv/config';` here to auto-load a gitignored `.env`.
  */
-// import dotenv from 'dotenv';
-// import path from 'path';
-// dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -37,6 +35,29 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+    },
+
+    /* --- Consulting Comp App (comp-app) ------------------------------------------------
+       Logs in once via SSO (comp-app-setup) and saves the session, then runs the comp-app
+       tests against it. Run just this app with: npx playwright test --project=comp-app    */
+    {
+      name: 'comp-app-setup',
+      testDir: './apps/comp-app',
+      testMatch: /auth\.setup\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: 'https://appstaging.cornerstone.com/consultingcomp/',
+      },
+    },
+    {
+      name: 'comp-app',
+      testDir: './apps/comp-app/tests',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: 'https://appstaging.cornerstone.com/consultingcomp/',
+        storageState: 'playwright/.auth/comp-app.json',
+      },
+      dependencies: ['comp-app-setup'],
     },
 
     // {
