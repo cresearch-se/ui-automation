@@ -31,6 +31,10 @@ export default defineConfig({
        See https://playwright.dev/docs/trace-viewer */
     trace: 'on',
     screenshot: 'only-on-failure',
+
+    /* The app is create-react-app and registers a service worker, which keeps the browser alive and
+       causes "worker process did not exit ... force-killed" hangs (~5min) at teardown. Block it. */
+    serviceWorkers: 'block',
   },
 
   /* Configure projects for major browsers */
