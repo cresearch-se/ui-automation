@@ -20,7 +20,9 @@ import fs from 'node:fs';
  */
 test('dump page snapshot', async ({ page }) => {
   await page.goto('Home');
-  await page.waitForLoadState('networkidle');
+  // This SPA shows a loading spinner then renders content asynchronously (~6-10s), so
+  // 'networkidle' fires too early and captures only the spinner. Wait for a real app element.
+  await page.getByRole('tab', { name: 'Employees', exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
 
   // Accessibility tree of the whole page — this is what Claude reads to choose role/name locators.
   const aria = await page.locator('body').ariaSnapshot();

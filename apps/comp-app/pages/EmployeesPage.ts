@@ -41,11 +41,14 @@ export class EmployeesPage {
   }
 
   async openEmployeesTab() {
+    // SPA renders behind a loading spinner (~6-10s) — wait for the tab before touching it,
+    // otherwise we act on the still-loading page. Don't rely on load/network state here.
+    await expect(this.employeesTab).toBeVisible({ timeout: 30_000 });
     const selected = await this.employeesTab.getAttribute('aria-selected');
     if (selected !== 'true') {
       await this.employeesTab.click();
     }
-    await expect(this.table).toBeVisible();
+    await expect(this.table).toBeVisible({ timeout: 30_000 });
   }
 
   // --- Top search-bar selects -------------------------------------------------
