@@ -14,3 +14,4 @@ node_modules/
 # Debug page snapshots from dump-page.spec.ts (split-brain workflow)
 page-snapshot.aria.yml
 page-snapshot.html
+page-report.md

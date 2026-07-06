@@ -1,36 +1,84 @@
 import { test } from '@playwright/test';
 import fs from 'node:fs';
+import { EmployeesPage } from '../pages/EmployeesPage';
 
 /**
  * THROWAWAY DEBUG HELPER — not a real test.
  *
- * Claude Code runs on a remote box that cannot reach this app, so it can't observe the live DOM to
- * pick correct locators. This spec captures the live page here on the LOCAL machine and writes it to
- * disk, so the snapshot can be pasted back to Claude to fix locators. See CLAUDE.md / memory
- * "split-brain-workflow".
+ * Claude Code runs on a remote box that cannot reach this app, so it can't observe the live DOM or
+ * the real data. This spec harvests the facts Claude needs to fix the filter tests and writes them
+ * to `page-report.md` at the repo root. See CLAUDE.md / memory "split-brain-workflow".
  *
  * Run (uses the saved auth session via the comp-app-edge project):
  *   npx playwright test dump-page --project=comp-app-edge
  *
- * Then open the generated files at the repo root and paste their contents into the chat:
- *   - page-snapshot.aria.yml  (accessibility tree — best for locators)
- *   - page-snapshot.html      (raw HTML — fallback / attribute detail)
+ * Then open `page-report.md` at the repo root and paste its contents into the chat.
  *
- * Tweak the navigation/interactions below to reach whatever page state you need snapshotted.
+ * Each probe is wrapped in try/catch so a failure in one section still writes the rest.
  */
 test('dump page snapshot', async ({ page }) => {
-  await page.goto('Home');
-  // This SPA shows a loading spinner then renders content asynchronously (~6-10s), so
-  // 'networkidle' fires too early and captures only the spinner. Wait for a real app element.
-  await page.getByRole('tab', { name: 'Employees', exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
+  const employees = new EmployeesPage(page);
+  const report: string[] = [];
+  const add = (s: string) => report.push(s);
 
-  // Accessibility tree of the whole page — this is what Claude reads to choose role/name locators.
-  const aria = await page.locator('body').ariaSnapshot();
-  fs.writeFileSync('page-snapshot.aria.yml', aria, 'utf-8');
+  const probe = async (title: string, fn: () => Promise<string>) => {
+    try {
+      add(`## ${title}\n${await fn()}`);
+    } catch (e) {
+      add(`## ${title}\n⚠️ ERROR: ${(e as Error).message.split('\n')[0]}`);
+    }
+  };
 
-  // Raw HTML as a fallback (class names, data-* attributes, antd internals).
-  const html = await page.content();
-  fs.writeFileSync('page-snapshot.html', html, 'utf-8');
+  await employees.goto();
 
-  console.log('Wrote page-snapshot.aria.yml and page-snapshot.html to the repo root — paste them to Claude.');
+  // Does the table have rows on default load, or does it require clicking Search?
+  await probe('Default load (before Search)', async () => {
+    const rows = await employees.rowCount();
+    const empty = await employees.emptyPlaceholder.isVisible();
+    return `rowCount = ${rows}\nemptyPlaceholder visible = ${empty}`;
+  });
+
+  // Real Office option values (antd renders these in a body-level portal).
+  const dropdownOptions = async () =>
+    (await page.locator('.ant-select-dropdown:visible .ant-select-item-option').allInnerTexts())
+      .map((t) => `  - ${t}`)
+      .join('\n');
+
+  await probe('Office select options', async () => {
+    await employees.officeSelect.click();
+    const opts = await dropdownOptions();
+    await page.keyboard.press('Escape');
+    return opts || '(none found)';
+  });
+
+  await probe('Country select options', async () => {
+    await employees.countrySelect.click();
+    const opts = await dropdownOptions();
+    await page.keyboard.press('Escape');
+    return opts || '(none found)';
+  });
+
+  await probe('Group select options', async () => {
+    await employees.groupSelect.click();
+    const opts = await dropdownOptions();
+    await page.keyboard.press('Escape');
+    return opts || '(none found)';
+  });
+
+  // Does clicking Search (no filters) load data?
+  await probe('After Search (no filters)', async () => {
+    await employees.search();
+    await page.waitForTimeout(5000); // give the async fetch time to render
+    const rows = await employees.rowCount();
+    const empty = await employees.emptyPlaceholder.isVisible();
+    return `rowCount = ${rows}\nemptyPlaceholder visible = ${empty}`;
+  });
+
+  const out = report.join('\n\n');
+  fs.writeFileSync('page-report.md', out, 'utf-8');
+  // Also dump the raw ARIA snapshot as a fallback.
+  fs.writeFileSync('page-snapshot.aria.yml', await page.locator('body').ariaSnapshot(), 'utf-8');
+
+  console.log('\n' + out + '\n');
+  console.log('Wrote page-report.md and page-snapshot.aria.yml to the repo root — paste page-report.md to Claude.');
 });
