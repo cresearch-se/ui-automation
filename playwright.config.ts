@@ -45,7 +45,8 @@ export default defineConfig({
       testDir: './apps/comp-app',
       testMatch: /auth\.setup\.ts/,
       use: {
-        ...devices['Desktop Chrome'],
+        ...devices['Desktop Edge'],
+        channel: 'msedge',
         baseURL: 'https://appstaging.cornerstone.com/consultingcomp/',
       },
     },
@@ -54,6 +55,17 @@ export default defineConfig({
       testDir: './apps/comp-app/tests',
       use: {
         ...devices['Desktop Chrome'],
+        baseURL: 'https://appstaging.cornerstone.com/consultingcomp/',
+        storageState: 'playwright/.auth/comp-app.json',
+      },
+      dependencies: ['comp-app-setup'],
+    },
+    {
+      name: 'comp-app-edge',
+      testDir: './apps/comp-app/tests',
+      use: {
+        ...devices['Desktop Edge'],
+        channel: 'msedge',
         baseURL: 'https://appstaging.cornerstone.com/consultingcomp/',
         storageState: 'playwright/.auth/comp-app.json',
       },
