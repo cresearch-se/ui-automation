@@ -28,7 +28,7 @@ setup('authenticate to comp-app via SSO', async ({ page }) => {
   }
 
   // Hitting the app unauthenticated should redirect to the SSO / identity provider.
-  await page.goto('/Home');
+  await page.goto('Home');
 
   // --- SSO LOGIN FLOW (TEMPLATE — confirm selectors against the live IdP) -----------------
   // Microsoft-style SSO is usually a multi-step form. Uncomment/adjust once the real flow is seen:

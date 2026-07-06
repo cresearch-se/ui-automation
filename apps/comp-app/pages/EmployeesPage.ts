@@ -36,7 +36,7 @@ export class EmployeesPage {
 
   /** Navigate to the app and ensure the Employees tab is open with its table visible. */
   async goto() {
-    await this.page.goto('/Home');
+    await this.page.goto('Home');
     await this.openEmployeesTab();
   }
 
