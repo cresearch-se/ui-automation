@@ -41,7 +41,8 @@ setup('authenticate to comp-app via SSO', async ({ page }) => {
   // ----------------------------------------------------------------------------------------
 
   // Consider login successful once the app's Employees tab is visible.
-  await expect(page.getByRole('tab', { name: 'Employees' })).toBeVisible({ timeout: 60_000 });
+  // exact: true — otherwise "Employees Jan Cycle" and "But for Employees" also match (strict-mode violation).
+  await expect(page.getByRole('tab', { name: 'Employees', exact: true })).toBeVisible({ timeout: 60_000 });
 
   await page.context().storageState({ path: authFile });
 });
