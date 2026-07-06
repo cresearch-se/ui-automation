@@ -11,8 +11,15 @@ import { type Page, type Locator, expect } from '@playwright/test';
  */
 export class EmployeesPage {
   readonly page: Page;
+  /** The Employees tab button in the tablist (outside the panel). */
   readonly employeesTab: Locator;
-  readonly searchRow: Locator;
+  /**
+   * Root of the Employees tab PANEL. react-bootstrap keeps every tab's panel mounted at once, so
+   * unscoped selectors like `.ant-table` match ALL tabs (8+ tables). Every element inside the
+   * Employees view MUST be located relative to this root to avoid strict-mode violations.
+   * (Portal-rendered antd dropdowns are the exception — see the *dropdown getters below.)
+   */
+  readonly root: Locator;
   readonly searchButton: Locator;
   readonly clearButton: Locator;
   readonly offCycleCheckbox: Locator;
@@ -23,15 +30,16 @@ export class EmployeesPage {
   constructor(page: Page) {
     this.page = page;
     this.employeesTab = page.getByRole('tab', { name: 'Employees', exact: true });
-    this.searchRow = page.locator('.searchrow');
-    this.searchButton = page.getByRole('button', { name: 'Search' });
-    this.clearButton = page.getByRole('button', { name: 'Clear' });
-    this.offCycleCheckbox = page
+    // Exact id — won't match #home-tabs-tabpane-employeesjancycle.
+    this.root = page.locator('#home-tabs-tabpane-employees');
+    this.searchButton = this.root.getByRole('button', { name: 'Search' });
+    this.clearButton = this.root.getByRole('button', { name: 'Clear' });
+    this.offCycleCheckbox = this.root
       .locator('label.ant-checkbox-wrapper', { hasText: 'Off-Cycle' })
       .locator('input[type="checkbox"]');
-    this.table = page.locator('.ant-table');
-    this.rows = page.locator('.ant-table-tbody tr.ant-table-row');
-    this.emptyPlaceholder = page.locator('.ant-table-placeholder');
+    this.table = this.root.locator('.ant-table').first();
+    this.rows = this.table.locator('.ant-table-tbody tr.ant-table-row');
+    this.emptyPlaceholder = this.table.locator('.ant-table-placeholder');
   }
 
   /** Navigate to the app and ensure the Employees tab is open with its table visible. */
@@ -55,7 +63,7 @@ export class EmployeesPage {
 
   /** Locate a top-bar antd select by its placeholder text (e.g. "Select country"). */
   private selectByPlaceholder(placeholder: string): Locator {
-    return this.searchRow.locator('.ant-select').filter({
+    return this.root.locator('.ant-select').filter({
       has: this.page.locator('.ant-select-selection-placeholder', { hasText: placeholder }),
     });
   }
