@@ -10,3 +10,7 @@ node_modules/
 # Local env / credentials
 .env
 .env.local
+
+# Debug page snapshots from dump-page.spec.ts (split-brain workflow)
+page-snapshot.aria.yml
+page-snapshot.html
