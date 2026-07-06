@@ -116,8 +116,12 @@ export class EmployeesPage {
     const headers = this.table.locator('.ant-table-thead th');
     const count = await headers.count();
     for (let i = 0; i < count; i++) {
-      const label = await headers.nth(i).getAttribute('aria-label');
-      if (label?.trim() === headerLabel) return i;
+      const th = headers.nth(i);
+      const label = (await th.getAttribute('aria-label'))?.trim();
+      if (label === headerLabel) return i;
+      // Fall back to header text (the th may expose its name via text, not aria-label).
+      const text = (await th.innerText()).trim();
+      if (text === headerLabel || text.split('\n')[0].trim() === headerLabel) return i;
     }
     return -1;
   }

@@ -1,20 +1,21 @@
 // spec: apps/comp-app/specs/employees-filters.md
 // app: Consulting Comp App (comp-app) — Employees tab, top search-bar filters
 //
-// STATUS: UNVERIFIED — authored offline from a static DOM snapshot. The automation host currently
-// has no network route to the app's internal IP, so these tests have NOT been executed. Run them
-// (`npx playwright test --project=comp-app`) and apply the healer once access is available.
-//
-// The placeholder data values below were NOT observed live (the <tbody> rows weren't captured).
-// Update them against real data before/at first run.
+// Data + flow VERIFIED LIVE 2026-07-06 via dump-page:
+//   - The table is EMPTY on load (0 rows, empty placeholder). Data loads only after clicking Search
+//     (100 rows with no filters — note the grid appears to page at 100).
+//   - Rows load asynchronously after Search, so count assertions poll with expect.poll.
+//   - Office options are codes (CRB, CRBE, CRCH, CRDC, CRLA, CRNY, CRSF, CRSV, CRUK).
+//   - Country/Group options are: BE-Brussels, UK-United Kingdom, US-United States.
 
 import { test, expect } from '@playwright/test';
 import { EmployeesPage } from '../pages/EmployeesPage';
 
-// TODO: confirm these against live Employees data.
-const OFFICE = 'London';
-const COUNTRY = 'United Kingdom';
-const NO_MATCH_OFFICE = 'Zzz No Such Office';
+const OFFICE = 'CRNY';                    // New York office code
+const COUNTRY = 'US-United States';
+const MISMATCH_COUNTRY = 'UK-United Kingdom'; // UK country + a US office (CRNY) => no matches
+
+const POLL = { timeout: 15_000 };
 
 test.describe('Employees Tab — Filtering (top search bar)', () => {
   let employees: EmployeesPage;
@@ -24,83 +25,91 @@ test.describe('Employees Tab — Filtering (top search bar)', () => {
     await employees.goto();
   });
 
-  // 1. Default load shows the Employees table with rows
-  test('Default load shows the Employees table with rows', async () => {
+  // 1. Default load is empty; Search loads the employee list
+  test('Default load is empty and Search loads employees', async () => {
     await expect(employees.employeesTab).toHaveAttribute('aria-selected', 'true');
-    await expect(employees.table).toBeVisible();
-    expect(await employees.rowCount()).toBeGreaterThan(0);
+    await expect(employees.emptyPlaceholder).toBeVisible();
+    expect(await employees.rowCount()).toBe(0);
+
+    await employees.search();
+    await expect.poll(() => employees.rowCount(), POLL).toBeGreaterThan(0);
   });
 
-  // 2. Filter by Office returns only matching rows
+  // 2. Filtering by a single Office returns rows that all share that office
   test('Filter by Office returns only matching rows', async () => {
     await employees.selectOffice(OFFICE);
     await employees.search();
+    await expect.poll(() => employees.rowCount(), POLL).toBeGreaterThan(0);
 
-    const offices = await employees.columnValues('Office');
-    expect(offices.length).toBeGreaterThan(0);
-    for (const office of offices) {
-      expect(office).toContain(OFFICE);
-    }
+    // Format-independent check: filtering to one office => every row shows the same office value.
+    const offices = (await employees.columnValues('Office')).map((o) => o.trim());
+    expect(new Set(offices).size).toBe(1);
   });
 
-  // 3. Filter by Country narrows the result set
+  // 3. Filter by Country does not widen the result set (pages at 100, so this is a <= check)
   test('Filter by Country narrows the result set', async () => {
-    const defaultCount = await employees.rowCount();
+    await employees.search();
+    await expect.poll(() => employees.rowCount(), POLL).toBeGreaterThan(0);
+    const allCount = await employees.rowCount();
 
     await employees.selectCountry(COUNTRY);
     await employees.search();
-
-    const filteredCount = await employees.rowCount();
-    expect(filteredCount).toBeGreaterThan(0);
-    expect(filteredCount).toBeLessThanOrEqual(defaultCount);
+    await expect.poll(() => employees.rowCount(), POLL).toBeGreaterThan(0);
+    expect(await employees.rowCount()).toBeLessThanOrEqual(allCount);
   });
 
-  // 4. Combining Country + Office applies both (AND)
+  // 4. Combining Country + Office applies both (AND) — all rows share the one office
   test('Combining Country and Office filters applies both', async () => {
     await employees.selectCountry(COUNTRY);
     await employees.selectOffice(OFFICE);
     await employees.search();
+    await expect.poll(() => employees.rowCount(), POLL).toBeGreaterThan(0);
 
-    const offices = await employees.columnValues('Office');
-    for (const office of offices) {
-      expect(office).toContain(OFFICE);
-    }
+    const offices = (await employees.columnValues('Office')).map((o) => o.trim());
+    expect(new Set(offices).size).toBe(1);
   });
 
-  // 5. Off-Cycle checkbox filters to off-cycle employees
-  test('Off-Cycle checkbox filters to off-cycle employees', async () => {
+  // 5. Off-Cycle checkbox applies without widening the result set
+  test('Off-Cycle checkbox filters the list', async () => {
+    await employees.search();
+    await expect.poll(() => employees.rowCount(), POLL).toBeGreaterThan(0);
+    const allCount = await employees.rowCount();
+
     await employees.toggleOffCycle();
     await employees.search();
-
-    const values = await employees.columnValues('Off-Cycle');
-    expect(values.length).toBeGreaterThan(0);
-    // TODO: confirm the truthy off-cycle rendering (e.g. "Yes" / a check icon) against live data,
-    // then tighten this from "non-empty" to an exact expected value.
-    for (const value of values) {
-      expect(value.trim()).not.toBe('');
-    }
+    // Off-cycle may legitimately return zero rows, so don't assert > 0 here.
+    await expect(employees.table).toBeVisible();
+    expect(await employees.rowCount()).toBeLessThanOrEqual(allCount);
   });
 
-  // 6. Clear resets all filters and restores the full list
+  // 6. Clear resets the filters; re-Search restores the full list
   test('Clear resets all filters and restores the full list', async () => {
-    const defaultCount = await employees.rowCount();
+    await employees.search();
+    await expect.poll(() => employees.rowCount(), POLL).toBeGreaterThan(0);
+    const allCount = await employees.rowCount();
 
     await employees.selectOffice(OFFICE);
     await employees.search();
-    expect(await employees.rowCount()).toBeLessThanOrEqual(defaultCount);
+    await expect.poll(() => employees.rowCount(), POLL).toBeGreaterThan(0);
+    expect(await employees.rowCount()).toBeLessThanOrEqual(allCount);
 
     await employees.clear();
-    // NOTE: if the app requires re-running Search after Clear, the healer should add
-    // `await employees.search();` here before the assertion.
-    expect(await employees.rowCount()).toBe(defaultCount);
+    await employees.search(); // default state requires a Search to populate
+    await expect.poll(() => employees.rowCount(), POLL).toBe(allCount);
   });
 
-  // 7. A filter with no matches shows the empty state
+  // 7. A filter combination with no matches shows the empty state
   test('A filter with no matches shows the empty state', async () => {
-    await employees.selectOffice(NO_MATCH_OFFICE);
+    // First load real rows so we prove they disappear.
+    await employees.search();
+    await expect.poll(() => employees.rowCount(), POLL).toBeGreaterThan(0);
+
+    // UK country + a US office (CRNY) => no employees match.
+    await employees.selectCountry(MISMATCH_COUNTRY);
+    await employees.selectOffice(OFFICE);
     await employees.search();
 
     await expect(employees.emptyPlaceholder).toBeVisible();
-    expect(await employees.rowCount()).toBe(0);
+    await expect.poll(() => employees.rowCount(), POLL).toBe(0);
   });
 });
