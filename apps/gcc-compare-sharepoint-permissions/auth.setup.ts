@@ -5,9 +5,9 @@ import { SITES } from './sites';
 /**
  * GCC SharePoint — authentication setup.
  *
- * SharePoint Online (cresearch1.sharepoint.com) uses Microsoft 365 SSO. This setup opens a
- * **headed** browser and captures the session to a storageState file that every later run reuses.
- * Cookies are tenant-wide, so this one login covers every site listed in sites.ts.
+ * SharePoint Online (cresearch1.sharepoint.com) uses Microsoft 365 SSO. This setup captures the
+ * session to a storageState file that every later run reuses. Cookies are tenant-wide, so this one
+ * login covers every site listed in sites.ts.
  *
  * Two modes, auto-selected:
  *   1. SCRIPTED — if GCC_SHAREPOINT_USERNAME / GCC_SHAREPOINT_PASSWORD are set, it types them into
@@ -16,19 +16,23 @@ import { SITES } from './sites';
  *   2. MANUAL   — if no env vars are set, you sign in entirely by hand.
  * Either way it finishes the moment the site's REST API answers with the new cookies.
  *
- * Set the credentials as real environment variables before running, e.g.:
- *   PowerShell:  $env:GCC_SHAREPOINT_USERNAME="you@cornerstone.com"; $env:GCC_SHAREPOINT_PASSWORD="…"
- *   cmd.exe:     set GCC_SHAREPOINT_USERNAME=you@cornerstone.com  &&  set GCC_SHAREPOINT_PASSWORD=…
- *   bash:        export GCC_SHAREPOINT_USERNAME=you@cornerstone.com GCC_SHAREPOINT_PASSWORD=…
- * (Or put them in a gitignored `.env` — see .env.example — if you install & wire up `dotenv`.)
+ * Set the credentials as real environment variables before running, e.g. (PowerShell — use SINGLE
+ * quotes so a `$` in the password isn't treated as a variable):
+ *   $env:GCC_SHAREPOINT_USERNAME='you@cornerstone.com'; $env:GCC_SHAREPOINT_PASSWORD='p@ss$word'
  *
  * HOW TO RUN (once; re-run whenever the saved session expires):
  *   npx playwright test --project=gcc-sharepoint-setup
+ *
+ * NOTE: this setup manages (launches + explicitly closes) its OWN headed Edge browser rather than
+ * using Playwright's auto `page` fixture. That's deliberate: a headed browser left to fixture
+ * teardown kept the worker alive → "worker process did not exit … force-killed" (~5 min) hangs. It
+ * also means a valid existing session is detected with NO browser launch at all (fast path).
  *
  * The session is saved to playwright/.auth/gcc-sharepoint.json (gitignored).
  */
 
 const authFile = 'playwright/.auth/gcc-sharepoint.json';
+const ACCEPT_JSON = { Accept: 'application/json;odata=nometadata' };
 
 /**
  * Best-effort drive of the Microsoft 365 sign-in form. Every step is optional and short-timeout:
@@ -58,34 +62,30 @@ async function trySignIn(page: Page, username: string, password: string): Promis
   };
 
   try {
-    // Email → Next
     if (await fillIfVisible('input[type="email"], input[name="loginfmt"]', username)) {
       await clickIfVisible('#idSIButton9, input[type="submit"]');
     }
-    // Password → Sign in
     if (await fillIfVisible('input[type="password"], input[name="passwd"]', password)) {
       await clickIfVisible('#idSIButton9, input[type="submit"]');
     }
-    // "Stay signed in?" → Yes (harmless if it never appears)
     await clickIfVisible('#idSIButton9, input[type="submit"][value="Yes"]');
   } catch {
     // Swallow anything — the REST poll is the real success gate.
   }
 }
 
-setup('capture SharePoint session', async ({ page, playwright }) => {
+setup('capture SharePoint session', async ({ playwright }) => {
   // Generous budget for SSO + a possible manual MFA step.
-  setup.setTimeout(5 * 60_000);
+  setup.setTimeout(6 * 60_000);
 
   const site = SITES[0];
+  const apiUrl = `${site}_api/web?$select=Title`;
 
-  // Fast path: if we already have a saved session that still works, don't log in again.
+  // Fast path: if we already have a saved session that still works, don't launch a browser at all.
   if (fs.existsSync(authFile)) {
     const ctx = await playwright.request.newContext({ storageState: authFile });
     try {
-      const res = await ctx.get(`${site}_api/web?$select=Title`, {
-        headers: { Accept: 'application/json;odata=nometadata' },
-      });
+      const res = await ctx.get(apiUrl, { headers: ACCEPT_JSON });
       if (res.ok()) {
         console.log(`\n>>> Existing session at ${authFile} is still valid — skipping login.\n`);
         return;
@@ -98,46 +98,56 @@ setup('capture SharePoint session', async ({ page, playwright }) => {
     console.log('\n>>> Saved session is stale — re-authenticating.\n');
   }
 
-  // Land on the first site. Unauthenticated, this redirects to the Microsoft sign-in flow.
-  await page.goto(site, { waitUntil: 'domcontentloaded' });
+  // Need to log in. Launch a headed Edge browser WE own, so we can close it explicitly at the end.
+  const browser = await playwright.chromium.launch({ headless: false, channel: 'msedge' });
+  const context = await browser.newContext();
+  const page = await context.newPage();
 
-  const username = process.env.GCC_SHAREPOINT_USERNAME;
-  const password = process.env.GCC_SHAREPOINT_PASSWORD;
+  try {
+    // Land on the first site. Unauthenticated, this redirects to the Microsoft sign-in flow.
+    await page.goto(site, { waitUntil: 'domcontentloaded' });
 
-  if (username && password) {
-    console.log('\n>>> Credentials found — attempting scripted sign-in. Complete MFA in the window if prompted...\n');
-    await trySignIn(page, username, password);
-  } else {
-    console.log('\n>>> No GCC_SHAREPOINT_USERNAME / GCC_SHAREPOINT_PASSWORD set — please sign in by hand.\n');
+    const username = process.env.GCC_SHAREPOINT_USERNAME;
+    const password = process.env.GCC_SHAREPOINT_PASSWORD;
+
+    if (username && password) {
+      console.log('\n>>> Credentials found — attempting scripted sign-in. Complete MFA in the window if prompted...\n');
+      await trySignIn(page, username, password);
+    } else {
+      console.log('\n>>> No GCC_SHAREPOINT_USERNAME / GCC_SHAREPOINT_PASSWORD set — please sign in by hand.\n');
+    }
+
+    // Login is "done" once the site's REST API answers 200. We test this with a fetch executed
+    // INSIDE the page — it uses the browser's own logged-in cookies for the SharePoint origin, the
+    // most faithful "am I authenticated?" signal, and patiently covers a manual MFA step. While the
+    // page is still on the Microsoft login origin the fetch is cross-origin and returns 0, so the
+    // poll just keeps waiting until you land back on SharePoint.
+    await expect
+      .poll(
+        async () => {
+          try {
+            return await page.evaluate(async (url) => {
+              try {
+                const r = await fetch(url, { headers: { Accept: 'application/json;odata=nometadata' } });
+                return r.status;
+              } catch {
+                return 0;
+              }
+            }, apiUrl);
+          } catch {
+            // e.g. navigation destroyed the execution context mid-poll — just retry.
+            return 0;
+          }
+        },
+        { message: 'Waiting for authenticated SharePoint access', timeout: 5 * 60_000, intervals: [2_000] },
+      )
+      .toBe(200);
+
+    await context.storageState({ path: authFile });
+    console.log(`\n>>> Login captured. Session saved to ${authFile}\n`);
+  } finally {
+    // Explicit teardown — this is what prevents the ~5 min "worker did not exit" force-kill hang.
+    await context.close();
+    await browser.close();
   }
-
-  // Login is "done" once the site's REST API answers 200. We test this with a fetch executed
-  // INSIDE the page — that uses the browser's own logged-in cookies for the SharePoint origin, so
-  // it's the most faithful "am I authenticated?" signal and patiently covers a manual MFA step.
-  // While the page is still on the Microsoft login origin, the fetch is cross-origin and fails
-  // (returns 0), so the poll simply keeps waiting until you land back on SharePoint.
-  const apiUrl = `${site}_api/web?$select=Title`;
-  await expect
-    .poll(
-      async () => {
-        try {
-          return await page.evaluate(async (url) => {
-            try {
-              const r = await fetch(url, { headers: { Accept: 'application/json;odata=nometadata' } });
-              return r.status;
-            } catch {
-              return 0;
-            }
-          }, apiUrl);
-        } catch {
-          // e.g. navigation destroyed the execution context mid-poll — just retry.
-          return 0;
-        }
-      },
-      { message: 'Waiting for authenticated SharePoint access', timeout: 5 * 60_000, intervals: [2_000] },
-    )
-    .toBe(200);
-
-  await page.context().storageState({ path: authFile });
-  console.log(`\n>>> Login captured. Session saved to ${authFile}\n`);
 });
