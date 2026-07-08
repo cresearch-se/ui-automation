@@ -61,7 +61,7 @@ function csvCell(value: string): string {
 }
 
 async function getJson(request: APIRequestContext, url: string): Promise<any> {
-  const res = await request.get(url, { headers: { Accept: 'application/json;odata=nominal' } });
+  const res = await request.get(url, { headers: { Accept: 'application/json;odata=nometadata' } });
   if (!res.ok()) {
     throw new Error(`GET ${url} -> ${res.status()} ${res.statusText()}`);
   }

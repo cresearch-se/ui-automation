@@ -84,7 +84,7 @@ setup('capture SharePoint session', async ({ page, playwright }) => {
     const ctx = await playwright.request.newContext({ storageState: authFile });
     try {
       const res = await ctx.get(`${site}_api/web?$select=Title`, {
-        headers: { Accept: 'application/json;odata=nominal' },
+        headers: { Accept: 'application/json;odata=nometadata' },
       });
       if (res.ok()) {
         console.log(`\n>>> Existing session at ${authFile} is still valid — skipping login.\n`);
@@ -111,18 +111,26 @@ setup('capture SharePoint session', async ({ page, playwright }) => {
     console.log('\n>>> No GCC_SHAREPOINT_USERNAME / GCC_SHAREPOINT_PASSWORD set — please sign in by hand.\n');
   }
 
-  // Login is "done" once the site's REST API answers 200 with our freshly-acquired cookies.
-  // This is exactly the access the scraper needs, so it's the most meaningful success signal —
-  // and it patiently covers a manual MFA step whether login was scripted or manual.
+  // Login is "done" once the site's REST API answers 200. We test this with a fetch executed
+  // INSIDE the page — that uses the browser's own logged-in cookies for the SharePoint origin, so
+  // it's the most faithful "am I authenticated?" signal and patiently covers a manual MFA step.
+  // While the page is still on the Microsoft login origin, the fetch is cross-origin and fails
+  // (returns 0), so the poll simply keeps waiting until you land back on SharePoint.
+  const apiUrl = `${site}_api/web?$select=Title`;
   await expect
     .poll(
       async () => {
         try {
-          const res = await page.request.get(`${site}_api/web?$select=Title`, {
-            headers: { Accept: 'application/json;odata=nominal' },
-          });
-          return res.status();
+          return await page.evaluate(async (url) => {
+            try {
+              const r = await fetch(url, { headers: { Accept: 'application/json;odata=nometadata' } });
+              return r.status;
+            } catch {
+              return 0;
+            }
+          }, apiUrl);
         } catch {
+          // e.g. navigation destroyed the execution context mid-poll — just retry.
           return 0;
         }
       },
