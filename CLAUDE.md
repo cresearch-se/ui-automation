@@ -11,27 +11,53 @@ same staging API, `appstaging.cornerstone.com`).
 - **Working directory:** `~/QA_Automation/playwright-ui-tests/` (this folder = repo root)
 - **Language:** TypeScript, `@playwright/test` runner
 - **Node:** v24 / npm 11
-- **Browser:** Chromium (installed at `~/.cache/ms-playwright/`)
+- **Browsers:** Chromium + Microsoft Edge (`channel: 'msedge'`); Chromium installed at `~/.cache/ms-playwright/`
 - **Deps:** `@playwright/test ^1.60.0`, `@types/node ^25.9.3` (devDependencies only; `package.json` has no `scripts`)
 
 ---
 
-## Current State (verified 2026-06-12)
+## Current State (verified 2026-07-07)
 
-The repo is still at the **bare scaffold stage** — the planner → generator → healer loop has not yet
-produced any real plans or tests.
+The repo has moved well past scaffold: the **first app (Comp App) has a full plan + real tests + a Page
+Object**, and the config now wires up per-app projects with auth. Branch `main`, 15 commits, clean tree
+(HEAD `440af23`).
 
-- **Git:** single commit `c3ceee8 "Initial commit: Playwright UI test suite scaffold"`, branch `main`, clean tree.
-- **`specs/`** — only `README.md` (placeholder). No test plans written yet.
-- **`tests/`** — only scaffold files:
-  - `example.spec.ts` — Playwright's default demo (hits `https://playwright.dev/`; safe to delete).
-  - `seed.spec.ts` — empty `Test group` > `seed` test with a `// generate code here.` stub. This is the
-    seed the agents start from; it does **not** set up auth or navigation yet.
-- **`playwright.config.ts`** — `testDir: ./tests`, `fullyParallel: true`, reporter `html`,
-  `trace: 'on-first-retry'`, one project **chromium only** (firefox/webkit/mobile/branded all commented out).
-  **`baseURL` is commented out / not set** — tests must use full URLs until it's configured.
-- **`.claude/settings.local.json`** — allows a set of git/gh/ssh Bash permissions (auth, config, add, commit, push, remote).
+- **First app under test:** **Consulting Comp App** (`apps/comp-app/`) at
+  `https://appstaging.cornerstone.com/consultingcomp/`. Built with **create-react-app + Ant Design (antd)**.
+  See the [[comp-app]] memory for URL/stack/access details.
+- **`apps/comp-app/specs/`** — `employees-filters.md` (real plan, written for the Employees tab filters).
+- **`apps/comp-app/tests/`**:
+  - `employees-filters.spec.ts` — 7 tests for the top search-bar filters (Office/Country/Group, Off-Cycle,
+    Clear, empty state). Data + flow **verified live 2026-07-06** via dump-page.
+  - `employees-column-filters.spec.ts` — per-column funnel filter tests.
+  - `dump-page.spec.ts` — a **utility spec** (not a real test) that dumps the live DOM / filter option
+    data so I can author selectors offline. Key to the split-brain workflow ([[split-brain-workflow]]).
+- **`apps/comp-app/pages/EmployeesPage.ts`** — Page Object for the Employees tab. Scoped to the panel root
+  `#home-tabs-tabpane-employees` (react-bootstrap keeps every tab's panel mounted, so unscoped `.ant-table`
+  etc. match 8+ tables → strict-mode violations). antd dropdowns render in `<body>` portals, so option
+  locators are global, not panel-scoped.
+- **`apps/comp-app/auth.setup.ts`** — SSO login → saves `storageState` to `playwright/.auth/comp-app.json`.
+  The SSO form steps are still a **TEMPLATE** (written without seeing the live IdP); success is asserted by
+  the Employees tab becoming visible. Needs `COMP_APP_USERNAME` / `COMP_APP_PASSWORD` in the env / `.env`.
+- **`playwright.config.ts`** — `fullyParallel: true`, reporter `html`. Global `use`: **`trace: 'on'`**,
+  `screenshot: 'only-on-failure'`, **`serviceWorkers: 'block'`** (the CRA service worker kept the browser
+  alive → ~5min force-kill hang at teardown). Projects: `chromium` (leftover default, `./tests`),
+  `comp-app-setup` (Edge, runs `auth.setup.ts`), `comp-app` (Chrome, depends on setup), `comp-app-edge`
+  (Edge, depends on setup). Each comp-app project sets its own `baseURL` + `storageState`.
+- **Leftover scaffold** in top-level `tests/`: `example.spec.ts` + `seed.spec.ts` (safe to delete; the
+  stray `chromium` project still points at `./tests`).
+- **Second app (branch `feat/gcc-sharepoint-permissions`):** **GCC Compare SharePoint Permissions**
+  (`apps/gcc-compare-sharepoint-permissions/`). A REST-based scraper (not UI clicks) that enumerates every
+  non-hidden list/library on the SharePoint sites in `sites.ts` and dumps their permission assignments to
+  `gcc-permissions.csv` (gitignored). Auth is scripted/manual M365 login (headed, MFA by hand) via
+  `GCC_SHAREPOINT_USERNAME` / `GCC_SHAREPOINT_PASSWORD`. Projects: `gcc-sharepoint-setup` +
+  `gcc-sharepoint` (no auto-login dependency). See the [[gcc-sharepoint-permissions]] memory.
 - **Agents** (`.claude/agents/*.md`) — all three run on **`model: sonnet`**; planner=green, generator=blue, healer=red.
+
+> **Reminder — split-brain workflow:** I run on remote Linux and **cannot reach the app**; tests only run
+> on the user's local **Windows**. I write/fix code; the user runs it and pastes back snapshots
+> (`test-results/**/error-context.md`, `dump-page` output, or `codegen`) so I can fix locators. That's why
+> `trace: 'on'` + failure screenshots are forced on. See [[split-brain-workflow]].
 
 ---
 
@@ -44,12 +70,24 @@ playwright-ui-tests/
 │   ├── playwright-test-generator.md      — turns a plan into .spec.ts test code
 │   └── playwright-test-healer.md         — re-runs failing tests and fixes them
 ├── .mcp.json                             — MCP config: registers the "playwright-test" server
-├── specs/                                — human-readable test PLANS (markdown), written by planner
-│   └── README.md
-├── tests/                                — Playwright test files (.spec.ts)
-│   ├── example.spec.ts                   — scaffold example (can delete)
-│   └── seed.spec.ts                      — seed/environment setup the agents use as a starting point
-├── playwright.config.ts                  — Playwright configuration
+├── apps/
+│   └── comp-app/                         — Consulting Comp App (first app under test)
+│       ├── auth.setup.ts                 — SSO login → saves playwright/.auth/comp-app.json
+│       ├── specs/employees-filters.md    — test PLAN for the Employees filters
+│       ├── pages/EmployeesPage.ts        — Page Object for the Employees tab
+│       └── tests/
+│           ├── employees-filters.spec.ts        — top search-bar filter tests (7)
+│           ├── employees-column-filters.spec.ts — per-column funnel filter tests
+│           └── dump-page.spec.ts                 — util: dumps live DOM/data for offline authoring
+│   └── gcc-compare-sharepoint-permissions/ — SharePoint list-permissions scraper (REST)
+│       ├── auth.setup.ts                 — M365 login (scripted from env or manual) → storageState
+│       ├── sites.ts                      — SharePoint site web URLs to scan
+│       └── tests/permissions-dump.spec.ts — enumerates lists → permissions → gcc-permissions.csv
+├── specs/README.md                       — placeholder (real plans live under apps/<app>/specs/)
+├── tests/                                — leftover scaffold (example.spec.ts, seed.spec.ts — deletable)
+├── playwright/.auth/                     — saved storageState per app (gitignored)
+├── playwright.config.ts                  — Playwright configuration (per-app projects)
+├── .env.example                          — template for COMP_APP_USERNAME / COMP_APP_PASSWORD
 └── package.json
 ```
 
@@ -94,18 +132,44 @@ The agents reference these tools as `mcp__playwright-test__browser_*`.
 ## Common Commands
 
 ```bash
-npx playwright test                      # run all tests
-npx playwright test --ui                 # interactive UI mode
-npx playwright test --project=chromium   # chromium only
-npx playwright test example              # run a specific file
-npx playwright show-report               # open last HTML report
-npx playwright codegen <url>             # manual record-and-generate (non-agent)
+npx playwright test                          # run all tests
+npx playwright test --project=comp-app       # Comp App on Chrome (runs auth.setup first)
+npx playwright test --project=comp-app-edge  # Comp App on Edge
+npx playwright test employees-filters        # run a specific file by name
+npx playwright test --ui                     # interactive UI mode (best for learning/debugging)
+npx playwright test --headed                 # watch the real browser
+npx playwright test --debug                  # step through with the inspector
+npx playwright show-report                   # open last HTML report
+npx playwright codegen <url>                 # manual record-and-generate (non-agent)
 ```
 
 Re-init / update agents (if Playwright is upgraded):
 ```bash
 npx playwright init-agents --loop=claude
 ```
+
+---
+
+## How a test run starts (lifecycle)
+
+What actually happens on `npx playwright test --project=comp-app` (useful when coming from Selenium —
+Playwright's runner owns the browser lifecycle; you never create/quit a driver):
+
+1. **Read config** — `playwright.config.ts` resolves the `comp-app` project. It has
+   `dependencies: ['comp-app-setup']`, so the dependency runs first.
+2. **Auth setup runs once** — `comp-app-setup` executes `auth.setup.ts`: logs in via SSO, waits for the
+   Employees tab, and saves the whole session to `playwright/.auth/comp-app.json`.
+3. **Tests run authenticated** — every `comp-app` test loads `storageState` from that file, so the browser
+   **boots already logged in**. No login code inside tests.
+4. **Per test** — the runner spins up a fresh isolated browser context (no state bleed), injects the `page`
+   fixture, runs `beforeEach` then the test body, and records a trace + failure screenshot.
+5. **Report** — results land in the `html` report (`npx playwright show-report`).
+
+Selenium → Playwright quick map: `WebDriverWait`/`ExpectedConditions` → **auto-waiting** (every action and
+`expect()` retries automatically; there are no manual waits in this repo — async data uses `expect.poll`).
+`driver.findElement(...)` (queries now) → **`page.locator(...)`** (lazy — queries only when acted on).
+Prefer `getByRole(...)`/`getByText(...)` over CSS/XPath; fall back to antd classes (`.ant-table`,
+`.ant-select`) only when there's no good role.
 
 ---
 
@@ -140,8 +204,11 @@ playwright/.auth/     — saved storageState per app (gitignored)
   Python framework's NTLM logic.
 
 ### Browsers
-- Start on **Chromium** only. Microsoft Edge is available via a project with `channel: 'msedge'`
-  (currently commented out in the config) — enable per app/project when cross-browser is wanted.
+- Comp App runs on **Chrome** (`comp-app`) and **Edge** (`comp-app-edge`, `channel: 'msedge'`); the
+  `comp-app-setup` auth project runs on Edge. Add more browsers per app/project as cross-browser need grows.
+- Note: `auth.setup.ts` (Edge) and the `comp-app` tests (Chrome) run on different channels but share the
+  same saved `storageState` — fine for cookie/token reuse. Keep this in mind if an auth quirk is
+  browser-specific.
 
 ---
 
