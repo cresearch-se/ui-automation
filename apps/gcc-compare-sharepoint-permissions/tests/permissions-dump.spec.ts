@@ -28,9 +28,11 @@ import { SITES } from '../sites';
 
 const OUTPUT_CSV = path.resolve(process.cwd(), 'gcc-permissions.csv');
 
-// Skip assignments whose ONLY role is "Limited Access" — SharePoint's UI hides these behind
-// "Show users", and they're just noise for a permissions comparison. Flip to false to keep them.
+// "Limited Access" is SharePoint's internal plumbing role (it's Hidden in the UI's permissions
+// page). When true we strip it from each principal's levels, and drop principals left with nothing
+// — so the CSV mirrors what the SharePoint permissions page actually shows. Flip to false to keep it.
 const SKIP_LIMITED_ACCESS = true;
+const LIMITED_ACCESS = 'Limited Access';
 
 // SharePoint PrincipalType enum -> human label (mirrors what the SharePoint UI shows).
 const PRINCIPAL_TYPE: Record<number, string> = {
@@ -121,12 +123,15 @@ test('dump SharePoint list permissions to CSV', async ({ request }) => {
           const principalType: string =
             PRINCIPAL_TYPE[member.PrincipalType as number] ?? `Type ${member.PrincipalType}`;
 
-          const levels = asArray(ra.RoleDefinitionBindings)
+          let levels = asArray(ra.RoleDefinitionBindings)
             .map((rd: any) => rd.Name as string)
             .filter(Boolean);
 
-          if (SKIP_LIMITED_ACCESS && levels.length > 0 && levels.every((l) => l === 'Limited Access')) {
-            continue;
+          if (SKIP_LIMITED_ACCESS) {
+            const meaningful = levels.filter((l) => l !== LIMITED_ACCESS);
+            // A principal whose ONLY role is Limited Access is SharePoint plumbing — drop it.
+            if (meaningful.length === 0) continue;
+            levels = meaningful;
           }
 
           rows.push(
