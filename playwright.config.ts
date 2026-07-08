@@ -79,6 +79,36 @@ export default defineConfig({
       dependencies: ['comp-app-setup'],
     },
 
+    /* --- GCC Compare SharePoint Permissions (gcc-sharepoint) ---------------------------
+       Scrapes list/library permissions from SharePoint sites via REST. Auth is captured
+       MANUALLY: run the setup once in a headed browser and sign in by hand (SSO + MFA).
+         npx playwright test --project=gcc-sharepoint-setup   # one-time manual login
+         npx playwright test --project=gcc-sharepoint         # run the scrape                    */
+    {
+      name: 'gcc-sharepoint-setup',
+      testDir: './apps/gcc-compare-sharepoint-permissions',
+      testMatch: /auth\.setup\.ts/,
+      use: {
+        ...devices['Desktop Edge'],
+        channel: 'msedge',
+        headless: false, // must be headed so the user can complete SSO + MFA by hand
+        baseURL: 'https://cresearch1.sharepoint.com/',
+      },
+    },
+    {
+      name: 'gcc-sharepoint',
+      testDir: './apps/gcc-compare-sharepoint-permissions/tests',
+      use: {
+        ...devices['Desktop Edge'],
+        channel: 'msedge',
+        baseURL: 'https://cresearch1.sharepoint.com/',
+        storageState: 'playwright/.auth/gcc-sharepoint.json',
+      },
+      // No `dependencies` on purpose: login is MANUAL, so we don't want every scrape to pop a
+      // browser and wait for sign-in. Run `--project=gcc-sharepoint-setup` once first; the scrape
+      // then reuses the saved session. Re-run setup only when the session expires.
+    },
+
     // {
     //   name: 'firefox',
     //   use: { ...devices['Desktop Firefox'] },

@@ -15,3 +15,6 @@ node_modules/
 page-snapshot.aria.yml
 page-snapshot.html
 page-report.md
+
+# Scraped SharePoint permissions output (gcc-compare-sharepoint-permissions)
+gcc-permissions.csv
