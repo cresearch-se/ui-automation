@@ -116,6 +116,12 @@ export class ReviewTabPage {
     return this.form.locator('.ant-form-item').filter({ has: this.page.locator(`label[for="${labelFor}"]`) });
   }
 
+  /** Labels of the fields the user can see in the form, top to bottom (hidden fields such as Rating are skipped). */
+  async formLabels(): Promise<string[]> {
+    const labels = await this.form.locator('.ant-form-item label:visible').allInnerTexts();
+    return labels.map(normalize).filter(Boolean);
+  }
+
   /** The text currently shown in a dropdown (`----- Select -----` until something is chosen). */
   selectedValue(select: Locator): Locator {
     return select.locator('.ant-select-selection-item');

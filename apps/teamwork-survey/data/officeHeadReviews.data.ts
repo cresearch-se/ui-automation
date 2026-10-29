@@ -48,6 +48,9 @@ export const REVIEW_PERIOD_FORMAT = /^[A-Z][a-z]+ \d{2}, \d{4} - [A-Z][a-z]+ \d{
 
 export const NOT_SELECTED = '----- Select -----';
 
+/** The only three fields on the form, top to bottom. Rating was removed and must NOT come back. */
+export const FORM_LABELS = ['Review Period', 'Office Head', 'Comments'];
+
 export const TAB_NAMES = [
   'Office Head Reviews',
   'Practice Head Reviews',

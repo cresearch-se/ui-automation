@@ -16,6 +16,7 @@ import { COLUMN } from '../pages/ReviewTabPage';
 import {
   FILTERABLE_COLUMNS,
   FLOW_HEAD,
+  FORM_LABELS,
   MESSAGES,
   NOT_SELECTED,
   OFFICE_HEADS,
@@ -82,6 +83,13 @@ test.describe('Office Head Reviews — page basics (read-only)', () => {
     await expect(reviews.submitButton).toBeEnabled();
     await expect(reviews.cancelButton).toBeHidden(); // Cancel exists in edit mode only
     await expect(reviews.ratingField).toBeHidden(); // Rating was removed; field lingers hidden in the DOM
+  });
+
+  test('form has exactly three fields, labelled Review Period, Office Head and Comments', async ({ reviews }) => {
+    expect(await reviews.formLabels()).toEqual(FORM_LABELS);
+    // two dropdowns + one comments editor, nothing else
+    await expect(reviews.form.locator('.ant-select:visible')).toHaveCount(2);
+    await expect(reviews.editor).toHaveCount(1);
   });
 
   test('Review Period offers exactly one option: Jan 01 – Dec 31 of the current year', async ({ reviews }) => {
