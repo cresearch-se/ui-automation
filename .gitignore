@@ -18,3 +18,6 @@ page-report.md
 
 # Scraped SharePoint permissions output (gcc-compare-sharepoint-permissions)
 gcc-permissions.csv
+
+# Output of apps/teamwork-survey/tests/dump-page.spec.ts (split-brain workflow)
+teamwork-dump/
