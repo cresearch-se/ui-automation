@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {},
+  "scripts": {
+    "gather-failures": "node scripts/gather-failures.mts"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
