@@ -209,8 +209,7 @@ test.describe('Office Head Reviews — exploration', () => {
       const items = await dd.locator('li, label').allInnerTexts().catch(() => []);
       add(`### ${name}\noptions: ${JSON.stringify(items.map((x) => x.trim()).filter(Boolean))}`);
       save(`filter-popup-${i}.html`, await dd.evaluate((e) => e.outerHTML).catch(() => ''));
-      await page.keyboard.press('Escape');
-      await page.mouse.click(5, 5);
+      await page.keyboard.press('Escape'); // (a click at 5,5 would hit the nav "Toggle navigation" button)
     }
 
     flush('index-readonly.md');

@@ -116,10 +116,13 @@ export class ReviewTabPage {
     return this.form.locator('.ant-form-item').filter({ has: this.page.locator(`label[for="${labelFor}"]`) });
   }
 
-  /** Labels of the fields the user can see in the form, top to bottom (hidden fields such as Rating are skipped). */
+  /**
+   * Labels of the fields the user can see in the form, top to bottom (hidden fields such as Rating are
+   * skipped). The app prints them as `Review Period :`; the trailing colon is punctuation, so it is dropped.
+   */
   async formLabels(): Promise<string[]> {
     const labels = await this.form.locator('.ant-form-item label:visible').allInnerTexts();
-    return labels.map(normalize).filter(Boolean);
+    return labels.map((label) => normalize(label).replace(/\s*:$/, '')).filter(Boolean);
   }
 
   /** The text currently shown in a dropdown (`----- Select -----` until something is chosen). */
@@ -143,6 +146,19 @@ export class ReviewTabPage {
     return (await this.dropdownOptions().allInnerTexts()).map(normalize);
   }
 
+  /**
+   * Scroll the virtual list one page down and let it re-render. Returns false when it could not move
+   * (already at the end). Two animation frames are enough for the list to render the new window.
+   */
+  private async scrollListDown(holder: Locator): Promise<boolean> {
+    return holder.evaluate(async (el) => {
+      const before = el.scrollTop;
+      el.scrollTop += el.clientHeight - 10;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      return el.scrollTop > before;
+    });
+  }
+
   /** Read EVERY option of a dropdown (the list is virtual, so scroll and collect), then close it. */
   async readOptions(select: Locator): Promise<string[]> {
     await select.click();
@@ -155,11 +171,7 @@ export class ReviewTabPage {
       for (const text of await this.renderedOptionTexts()) {
         if (!collected.includes(text)) collected.push(text);
       }
-      const atBottom = await holder.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 1);
-      if (atBottom) break;
-      const before = (await this.renderedOptionTexts()).join('|');
-      await holder.evaluate((el) => { el.scrollTop += el.clientHeight - 10; });
-      await expect.poll(async () => (await this.renderedOptionTexts()).join('|')).not.toBe(before);
+      if (!(await this.scrollListDown(holder))) break;
     }
     await this.page.keyboard.press('Escape');
     await expect(this.dropdownOptions()).toHaveCount(0);
@@ -177,13 +189,12 @@ export class ReviewTabPage {
       const index = (await this.renderedOptionTexts()).indexOf(normalize(text));
       if (index >= 0) {
         await this.dropdownOptions().nth(index).click();
+        // The closing dropdown stays in the DOM for a moment; wait for it to go so the next dropdown's
+        // locators don't match two lists.
+        await expect(this.dropdownOptions()).toHaveCount(0);
         return;
       }
-      const atBottom = await holder.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 1);
-      if (atBottom) break;
-      const before = (await this.renderedOptionTexts()).join('|');
-      await holder.evaluate((el) => { el.scrollTop += el.clientHeight - 10; });
-      await expect.poll(async () => (await this.renderedOptionTexts()).join('|')).not.toBe(before);
+      if (!(await this.scrollListDown(holder))) break;
     }
     throw new Error(`Option not found in dropdown: "${text}"`);
   }
@@ -203,6 +214,8 @@ export class ReviewTabPage {
     await this.page.keyboard.press('ControlOrMeta+A');
     await this.page.keyboard.press('Backspace');
     if (text) await this.page.keyboard.type(text);
+    // Leave the editor so the form picks the text up before anything (Submit) validates it.
+    await this.page.keyboard.press('Tab');
   }
 
   // ------------------------------------------------------------------ form: flows

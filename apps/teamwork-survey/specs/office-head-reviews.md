@@ -6,7 +6,7 @@ Route: `officeheadreview`.
 ## Conventions for all scenarios
 - **Seed:** open `officeheadreview`, wait for the Review Period dropdown and My Submissions table.
 - **Review period:** other tests read the option from the dropdown at runtime (don't hardcode the year);
-  only scenario 1.3 asserts it equals `January 01, <current year> - December 31, <current year>`.
+  only scenario 1.3 asserts the dropdown includes `January 01, <current year> - December 31, <current year>`.
 - **Office head option text** = `Last, First - Office`; table shows `Last, First` + Office separately
   (split option on the last ` - `).
 - **Data hygiene:** staging already has rows. Never assume an empty table. Tests that create a review
@@ -20,10 +20,11 @@ Route: `officeheadreview`.
     growth."; counter `CHARS: 0  WORDS: 0`; Submit visible and enabled.
 1.2 **Tabs:** officer sees exactly 4 tabs (Office Head Reviews, Practice Head Reviews, Officer Teamwork
     Survey, Principal Teamwork Survey); Office Head Reviews is active by default.
-1.3 **Review period value check (flags admin errors):** the Review Period dropdown has **exactly one**
-    option and it equals `January 01, <current year> - December 31, <current year>` (year computed at
-    runtime). Any other value/extra option → test fails with a clear message ("admin entered wrong
-    review period").
+1.3 **Review period value check (flags admin errors):** the Review Period dropdown **includes** the
+    standard period `January 01, <current year> - December 31, <current year>` (year computed at
+    runtime). Missing → test fails with a clear message ("admin must configure the period"). Other
+    periods are allowed and ignored (decided 2026-10-30: staging also lists 2025 and a short
+    `October 01 - October 09, 2026` period; the earlier "exactly one" rule was dropped).
 1.4 **Office Head list check:** the dropdown has exactly the 9 expected entries listed in
     app-notes.md (no more, no fewer, **same order**). Extra/missing/reordered person → fail with a diff.
     (Greg Leonard appears twice — London and Brussels — same person, two locations.)

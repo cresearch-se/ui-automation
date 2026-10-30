@@ -125,6 +125,12 @@ Default tab on load: Office Head Reviews (highlighted blue/active).
   in the real world only one period will show. ⇒ Tests must NOT hardcode the count: assert the options
   include the current-year period and that every option has the `Month DD, YYYY - Month DD, YYYY` format.
   (An old 2025 row can't be deleted — no Action buttons — so a 2nd option may persist.)
+- ✅ **First live run (2026-10-30):** the **Review Period form dropdown** on staging lists three options —
+  `January 01, 2025 - December 31, 2025`, `January 01, 2026 - December 31, 2026` and
+  `October 01, 2026 - October 09, 2026`. Decision: the test only requires the standard current-year
+  period to be present and ignores the others. Form labels carry a trailing colon in the UI
+  (`Review Period :`, `Office Head :`, `Comments :`); the status bar reads `Chars: 6Words: 1` with no
+  gap; the nav "Toggle navigation" button sits at the top-left corner of the page.
 - Note: the user labelled screenshot 3 "sorting" but it shows the filter popup; **no screenshot of
   sorting yet** (sorting = the up/down arrows beside the header text).
 
