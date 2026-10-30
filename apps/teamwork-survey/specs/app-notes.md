@@ -130,7 +130,8 @@ Default tab on load: Office Head Reviews (highlighted blue/active).
   `October 01, 2026 - October 09, 2026`. Decision: the test only requires the standard current-year
   period to be present and ignores the others. Form labels carry a trailing colon in the UI
   (`Review Period :`, `Office Head :`, `Comments :`); the status bar reads `Chars: 6Words: 1` with no
-  gap; the nav "Toggle navigation" button sits at the top-left corner of the page.
+  gap and **does not count spaces** (`hello world` → `Chars: 10  Words: 2`); the nav "Toggle navigation"
+  button sits at the top-left corner of the page.
 - Note: the user labelled screenshot 3 "sorting" but it shows the filter popup; **no screenshot of
   sorting yet** (sorting = the up/down arrows beside the header text).
 

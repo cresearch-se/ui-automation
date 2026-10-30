@@ -112,7 +112,8 @@ test.describe('Office Head Reviews — page basics (read-only)', () => {
     await expect(reviews.statusBar).toContainText(/words:\s*1(?!\d)/i);
 
     await reviews.setComments('hello world');
-    await expect(reviews.statusBar).toContainText(/chars:\s*11(?!\d)/i);
+    // "hello world" is 11 characters, but the Jodit counter does not count the space → Chars: 10.
+    await expect(reviews.statusBar).toContainText(/chars:\s*10(?!\d)/i);
     await expect(reviews.statusBar).toContainText(/words:\s*2(?!\d)/i);
   });
 
