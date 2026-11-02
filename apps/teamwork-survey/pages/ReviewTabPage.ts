@@ -1,6 +1,6 @@
 import { type Page, type Locator, expect } from '@playwright/test';
-import { type OfficeHead, MESSAGES, currentReviewPeriod } from '../data/officeHeadReviews.data';
-import { normalize } from '../utils/text';
+import { type OfficeHead, MESSAGES, STAGE, currentReviewPeriod } from '../data/officeHeadReviews.data';
+import { normalize, stamped } from '../utils/text';
 
 /**
  * Shared base for the "review form + My Submissions table" tabs of the Reviews app. Tabs 1, 2 and 4
@@ -222,24 +222,58 @@ export class ReviewTabPage {
 
   /** Fill the form and click Submit (no waiting on the outcome — tests assert the toast / row). */
   async fillAndSubmit(person: OfficeHead, comments: string, period = currentReviewPeriod()) {
-    await this.selectReviewPeriod(period);
-    await this.selectPerson(person);
-    await this.setComments(comments);
+    await this.fillForm(person, comments, period);
+    if (!(await this.submitIsEnabled())) {
+      // Submit stays disabled while the "review already exists" prompt is up: an earlier cleanup missed a row.
+      // Reload, clear the head again and retry once; the warning keeps the miss visible in the report.
+      console.warn(`[cleanup] Submit disabled for ${person.name} (${person.office}) — ${await this.visibleRowsSummary()}`);
+      await this.goto();
+      await this.removeExistingReviewsFor(person);
+      await this.fillForm(person, comments, period);
+      if (!(await this.submitIsEnabled())) {
+        const prompt = await this.duplicateMessage.isVisible();
+        throw new Error(
+          (prompt
+            ? `A review already exists for ${person.name} (${person.office}) despite cleanup`
+            : `Submit stayed disabled for ${person.name} (${person.office})`) + ` — ${await this.visibleRowsSummary()}`,
+        );
+      }
+    }
     await this.submitButton.click();
   }
 
+  private async fillForm(person: OfficeHead, comments: string, period: string) {
+    await this.selectReviewPeriod(period);
+    await this.selectPerson(person);
+    await this.setComments(comments);
+  }
+
+  /** Submit is enabled right after filling the form, unless the duplicate prompt or a pending save blocks it. */
+  private async submitIsEnabled(): Promise<boolean> {
+    try {
+      await expect(this.submitButton).toBeEnabled({ timeout: 10_000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async visibleRowsSummary(): Promise<string> {
+    const rows = (await this.rows.allInnerTexts()).map(normalize);
+    return `rows on screen: ${rows.length ? rows.join(' | ') : 'none'}`;
+  }
+
   /**
-   * SETUP helper (not a test step): make sure `person` has exactly one current-period review whose
-   * comment is `comments`; returns its row. Clears any existing review for that person first so the
-   * duplicate prompt can't interfere.
+   * SETUP helper (not a test step): make sure `person` has exactly one current-period review, created with the
+   * comment "<tag> created"; returns a row locator that keeps matching after the comment is edited (matches on
+   * `tag`). Clears any existing review for that person first so the duplicate prompt can't interfere.
    */
-  async createReview(person: OfficeHead, comments: string): Promise<Locator> {
+  async createReview(person: OfficeHead, tag: string): Promise<Locator> {
     await this.removeExistingReviewsFor(person);
-    await this.fillAndSubmit(person, comments);
-    const row = this.rowWithText(comments);
-    await expect(row).toHaveCount(1);
+    await this.fillAndSubmit(person, stamped(tag, STAGE.created));
+    await expect(this.rowWithText(stamped(tag, STAGE.created))).toHaveCount(1);
     await this.dismissToasts();
-    return row;
+    return this.rowWithText(tag);
   }
 
   /** Re-select an existing period + person combo and accept the "edit this review?" prompt. */
@@ -318,9 +352,12 @@ export class ReviewTabPage {
     await this.deleteWhilePresent(existing);
   }
 
-  /** Delete every row carrying `tag` (test teardown). Reloads first so a half-finished UI can't block it. */
-  async deleteRowsWithTag(tag: string) {
-    if ((await this.rowWithText(tag).count()) === 0) return;
+  /**
+   * Delete every row carrying `tag` (test teardown). Reloads first so a half-finished UI can't block it.
+   * After a failed test the page may be mid-load, so `reload` skips the "nothing on screen" shortcut.
+   */
+  async deleteRowsWithTag(tag: string, { reload = false } = {}) {
+    if (!reload && (await this.rowWithText(tag).count()) === 0) return;
     await this.goto();
     await this.deleteWhilePresent(this.actionableRows.filter({ hasText: tag }));
   }
@@ -329,6 +366,7 @@ export class ReviewTabPage {
     for (let guard = 0; guard < 50; guard++) {
       const count = await rows.count();
       if (count === 0) return;
+      console.log(`[cleanup] deleting (${count} left): ${normalize(await rows.first().innerText())}`);
       await this.deleteRow(rows.first());
       // The toast means the server confirmed the delete; without it the page can be left or closed while the
       // request is still pending and the row comes back.

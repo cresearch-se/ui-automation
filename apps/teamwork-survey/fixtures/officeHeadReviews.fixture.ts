@@ -15,14 +15,14 @@ export const test = base.extend<{ reviews: OfficeHeadReviewsPage; tag: string }>
     await use(uniqueTag());
   },
 
-  reviews: async ({ page, tag }, use) => {
+  reviews: async ({ page, tag }, use, testInfo) => {
     const reviews = new OfficeHeadReviewsPage(page);
     await reviews.goto();
 
     await use(reviews);
 
     try {
-      await reviews.deleteRowsWithTag(tag);
+      await reviews.deleteRowsWithTag(tag, { reload: testInfo.status !== testInfo.expectedStatus });
     } catch (error) {
       console.warn(`Teardown could not delete reviews tagged "${tag}" — remove them manually.\n${error}`);
     }

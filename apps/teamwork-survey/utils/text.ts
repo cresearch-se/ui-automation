@@ -19,7 +19,13 @@ export function parseUsDate(value: string): Date {
 /** A comment/tag that is unique per test run, so a test can find (and clean up) only its own rows. */
 export const uniqueTag = () => `UITEST-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
 
-export const compareText = (a: string, b: string) => a.localeCompare(b);
+/**
+ * A comment that starts with the test's tag and says how far the row got ("<tag> created", "<tag> edited via icon").
+ * A stale row left on staging then shows at which step its test stopped; teardown still finds it by the tag.
+ */
+export const stamped = (tag: string, stage: string) => `${tag} ${stage}`;
+
+export const compareText =(a: string, b: string) => a.localeCompare(b);
 export const compareUsDates = (a: string, b: string) => parseUsDate(a).getTime() - parseUsDate(b).getTime();
 
 /** True when `values` are in order (ties allowed). */

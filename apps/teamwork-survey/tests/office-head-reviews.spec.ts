@@ -23,6 +23,7 @@ import {
   REVIEW_PERIOD_FORMAT,
   SORTABLE_COLUMNS,
   SORT_FILTER_HEADS,
+  STAGE,
   TABLE_HEADERS,
   TAB_NAMES,
   UNSORTABLE_COLUMNS,
@@ -31,7 +32,7 @@ import {
   optionText,
   type OfficeHead,
 } from '../data/officeHeadReviews.data';
-import { compareText, compareUsDates, isSorted, normalize, todayUs } from '../utils/text';
+import { compareText, compareUsDates, isSorted, normalize, stamped, todayUs } from '../utils/text';
 
 // ---------------------------------------------------------------------------------------------------
 // Shared assertions (used by several tests)
@@ -187,12 +188,13 @@ test.describe('Office Head Reviews — flows that change data', () => {
   test('Submit adds the review, shows the success toast and resets the form', async ({ reviews, tag }) => {
     await reviews.removeExistingReviewsFor(FLOW_HEAD);
 
-    await reviews.fillAndSubmit(FLOW_HEAD, tag);
+    const comments = stamped(tag, STAGE.created);
+    await reviews.fillAndSubmit(FLOW_HEAD, comments);
 
     await expect(reviews.toast(MESSAGES.submitted)).toBeVisible();
     const row = reviews.rowWithText(tag);
     await expect(row).toHaveCount(1);
-    await expectRowValues(reviews, row, FLOW_HEAD, tag);
+    await expectRowValues(reviews, row, FLOW_HEAD, comments);
     await expectBlankForm(reviews);
   });
 
@@ -206,13 +208,13 @@ test.describe('Office Head Reviews — flows that change data', () => {
     const row = await reviews.createReview(FLOW_HEAD, tag);
 
     await reviews.openEdit(row);
-    await expectEditMode(reviews, FLOW_HEAD, tag);
+    await expectEditMode(reviews, FLOW_HEAD, stamped(tag, STAGE.created));
 
-    await reviews.setComments(`${tag} edited`);
+    await reviews.setComments(stamped(tag, STAGE.editedViaIcon));
     await reviews.submitButton.click();
 
     await expect(reviews.toast(MESSAGES.submitted)).toBeVisible(); // same toast for add and update
-    await expect(reviews.cell(row, COLUMN.comments)).toHaveText(`${tag} edited`);
+    await expect(reviews.cell(row, COLUMN.comments)).toHaveText(stamped(tag, STAGE.editedViaIcon));
     await expect(reviews.cell(row, COLUMN.head)).toHaveText(FLOW_HEAD.name);
     await expect(reviews.cell(row, COLUMN.office)).toHaveText(FLOW_HEAD.office);
     await expect(reviews.cell(row, COLUMN.period)).toHaveText(currentReviewPeriod());
@@ -224,10 +226,10 @@ test.describe('Office Head Reviews — flows that change data', () => {
     const row = await reviews.createReview(FLOW_HEAD, tag);
 
     await reviews.openEdit(row);
-    await reviews.setComments(`${tag} CHANGED`);
+    await reviews.setComments(stamped(tag, STAGE.cancelledEdit));
     await reviews.cancelEdit();
 
-    await expect(reviews.cell(row, COLUMN.comments)).toHaveText(tag); // original, unchanged
+    await expect(reviews.cell(row, COLUMN.comments)).toHaveText(stamped(tag, STAGE.created)); // original, unchanged
     // ASSUMPTION: Cancel resets the form to the blank "new review" state.
     await expect.soft(reviews.selectedValue(reviews.personSelect)).toHaveText(NOT_SELECTED);
     await expect.soft(reviews.editor).toHaveText('');
@@ -274,13 +276,13 @@ test.describe('Office Head Reviews — flows that change data', () => {
     const row = await reviews.createReview(FLOW_HEAD, tag);
 
     await reviews.startEditViaDuplicate(FLOW_HEAD);
-    await expectEditMode(reviews, FLOW_HEAD, tag);
+    await expectEditMode(reviews, FLOW_HEAD, stamped(tag, STAGE.created));
 
-    await reviews.setComments(`${tag} via-duplicate`);
+    await reviews.setComments(stamped(tag, STAGE.editedViaDuplicate));
     await reviews.submitButton.click();
 
     await expect(reviews.toast(MESSAGES.submitted)).toBeVisible();
-    await expect(reviews.cell(row, COLUMN.comments)).toHaveText(`${tag} via-duplicate`);
+    await expect(reviews.cell(row, COLUMN.comments)).toHaveText(stamped(tag, STAGE.editedViaDuplicate));
     await expect(reviews.rowWithText(tag)).toHaveCount(1); // overridden, not duplicated
   });
 
@@ -288,10 +290,10 @@ test.describe('Office Head Reviews — flows that change data', () => {
     const row = await reviews.createReview(FLOW_HEAD, tag);
 
     await reviews.startEditViaDuplicate(FLOW_HEAD);
-    await reviews.setComments(`${tag} CHANGED`);
+    await reviews.setComments(stamped(tag, STAGE.cancelledEdit));
     await reviews.cancelEdit();
 
-    await expect(reviews.cell(row, COLUMN.comments)).toHaveText(tag);
+    await expect(reviews.cell(row, COLUMN.comments)).toHaveText(stamped(tag, STAGE.created));
   });
 
   // --- delete ------------------------------------------------------------------------------------------
@@ -446,30 +448,30 @@ test.describe('Office Head Reviews — full cycle for every office head', () => 
       const row = reviews.rowWithText(tag);
 
       await test.step('submit a new review', async () => {
-        await reviews.fillAndSubmit(head, tag);
+        await reviews.fillAndSubmit(head, stamped(tag, STAGE.created));
         await expect(reviews.toast(MESSAGES.submitted)).toBeVisible();
         await expect(row).toHaveCount(1);
-        await expectRowValues(reviews, row, head, tag);
+        await expectRowValues(reviews, row, head, stamped(tag, STAGE.created));
       });
 
       await test.step('edit through the Edit icon', async () => {
         await reviews.dismissToasts();
         await reviews.openEdit(row);
-        await expectEditMode(reviews, head, tag);
-        await reviews.setComments(`${tag} icon-edit`);
+        await expectEditMode(reviews, head, stamped(tag, STAGE.created));
+        await reviews.setComments(stamped(tag, STAGE.editedViaIcon));
         await reviews.submitButton.click();
         await expect(reviews.toast(MESSAGES.submitted)).toBeVisible();
-        await expect(reviews.cell(row, COLUMN.comments)).toHaveText(`${tag} icon-edit`);
+        await expect(reviews.cell(row, COLUMN.comments)).toHaveText(stamped(tag, STAGE.editedViaIcon));
       });
 
       await test.step('edit through the "review already exists" prompt (Yes)', async () => {
         await reviews.dismissToasts();
         await reviews.startEditViaDuplicate(head);
-        await expectEditMode(reviews, head, `${tag} icon-edit`);
-        await reviews.setComments(`${tag} duplicate-edit`);
+        await expectEditMode(reviews, head, stamped(tag, STAGE.editedViaIcon));
+        await reviews.setComments(stamped(tag, STAGE.editedViaDuplicate));
         await reviews.submitButton.click();
         await expect(reviews.toast(MESSAGES.submitted)).toBeVisible();
-        await expect(reviews.cell(row, COLUMN.comments)).toHaveText(`${tag} duplicate-edit`);
+        await expect(reviews.cell(row, COLUMN.comments)).toHaveText(stamped(tag, STAGE.editedViaDuplicate));
         await expect(row).toHaveCount(1);
       });
 

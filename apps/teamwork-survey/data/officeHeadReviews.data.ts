@@ -48,6 +48,14 @@ export const REVIEW_PERIOD_FORMAT = /^[A-Z][a-z]+ \d{2}, \d{4} - [A-Z][a-z]+ \d{
 
 export const NOT_SELECTED = '----- Select -----';
 
+/** Stage labels a test puts in its comment (after the tag) as the review moves through the flow. */
+export const STAGE = {
+  created: 'created',
+  editedViaIcon: 'edited via icon',
+  editedViaDuplicate: 'edited via duplicate prompt',
+  cancelledEdit: 'edit that gets cancelled',
+};
+
 /** The only three fields on the form, top to bottom. Rating was removed and must NOT come back. */
 export const FORM_LABELS = ['Review Period', 'Office Head', 'Comments'];
 
