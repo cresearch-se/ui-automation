@@ -94,6 +94,7 @@ export default defineConfig({
     {
       name: 'teamwork-survey',
       testDir: './apps/teamwork-survey/tests',
+      expect: { timeout: 15_000 }, // staging saves can take >5s; Playwright's default is 5s
       use: {
         ...devices['Desktop Edge'],
         channel: 'msedge',
