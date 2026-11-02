@@ -1,5 +1,5 @@
 import { type Page, type Locator, expect } from '@playwright/test';
-import { type OfficeHead, currentReviewPeriod } from '../data/officeHeadReviews.data';
+import { type OfficeHead, MESSAGES, currentReviewPeriod } from '../data/officeHeadReviews.data';
 import { normalize } from '../utils/text';
 
 /**
@@ -330,6 +330,9 @@ export class ReviewTabPage {
       const count = await rows.count();
       if (count === 0) return;
       await this.deleteRow(rows.first());
+      // The toast means the server confirmed the delete; without it the page can be left or closed while the
+      // request is still pending and the row comes back.
+      await expect(this.toast(MESSAGES.deleted)).toBeVisible();
       await expect(rows).toHaveCount(count - 1);
       await this.dismissToasts();
     }
