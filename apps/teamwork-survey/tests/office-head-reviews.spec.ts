@@ -182,7 +182,8 @@ test.describe('Office Head Reviews — page basics (read-only)', () => {
 // 2. FLOWS THAT CHANGE DATA (serial; every test creates its own tagged review, fixture deletes it)
 // ===================================================================================================
 test.describe('Office Head Reviews — flows that change data', () => {
-  test.describe.configure({ mode: 'serial', timeout: 90_000 });
+  // Not `serial`: a failure there skips every later test. The project runs this file in order in one worker.
+  test.describe.configure({ timeout: 90_000 });
 
   // --- submit ----------------------------------------------------------------------------------------
   test('Submit adds the review, shows the success toast and resets the form', async ({ reviews, tag }) => {
@@ -440,7 +441,7 @@ test.describe('Office Head Reviews — flows that change data', () => {
 // 3. FULL CYCLE FOR EVERY OFFICE HEAD (serial)
 // ===================================================================================================
 test.describe('Office Head Reviews — full cycle for every office head', () => {
-  test.describe.configure({ mode: 'serial', timeout: 150_000 });
+  test.describe.configure({ timeout: 150_000 });
 
   for (const head of OFFICE_HEADS) {
     test(`${optionText(head)}: submit → edit (icon) → edit (duplicate prompt) → delete`, async ({ reviews, tag }) => {

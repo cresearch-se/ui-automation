@@ -103,6 +103,9 @@ export class ReviewTabPage {
   async waitUntilLoaded() {
     await expect(this.submitButton).toBeVisible({ timeout: 90_000 });
     await expect(this.rows.first().or(this.emptyPlaceholder)).toBeVisible({ timeout: 60_000 });
+    // antd can show "No data" while the submissions request is still in flight, which made cleanups count zero rows
+    // and skip. Wait for the network to go quiet (capped: the app may keep making background calls).
+    await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
   }
 
   async openTab(name: string) {
@@ -349,6 +352,9 @@ export class ReviewTabPage {
       .filter({ hasText: person.name })
       .filter({ hasText: person.office })
       .filter({ hasText: currentReviewPeriod() });
+    console.log(
+      `[cleanup] ${person.name} (${person.office}): ${await this.rows.count()} rows on screen, ${await existing.count()} to delete`,
+    );
     await this.deleteWhilePresent(existing);
   }
 

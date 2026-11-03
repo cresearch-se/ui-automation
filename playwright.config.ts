@@ -95,6 +95,8 @@ export default defineConfig({
       name: 'teamwork-survey',
       testDir: './apps/teamwork-survey/tests',
       expect: { timeout: 15_000 }, // staging saves can take >5s; Playwright's default is 5s
+      // The data-changing tests share staging rows (one head's review), so a file runs in order in ONE worker.
+      fullyParallel: false,
       use: {
         ...devices['Desktop Edge'],
         channel: 'msedge',
