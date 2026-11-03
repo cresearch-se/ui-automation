@@ -1,4 +1,4 @@
-import { type Page, type Locator, expect } from '@playwright/test';
+import { type Page, type Locator, type Request, type Response, expect } from '@playwright/test';
 import { type OfficeHead, MESSAGES, STAGE, currentReviewPeriod } from '../data/officeHeadReviews.data';
 import { normalize, stamped } from '../utils/text';
 
@@ -367,14 +367,48 @@ export class ReviewTabPage {
       const count = await rows.count();
       if (count === 0) return;
       console.log(`[cleanup] deleting (${count} left): ${normalize(await rows.first().innerText())}`);
-      await this.deleteRow(rows.first());
-      // The toast means the server confirmed the delete; without it the page can be left or closed while the
-      // request is still pending and the row comes back.
-      await expect(this.toast(MESSAGES.deleted)).toBeVisible();
-      await expect(rows).toHaveCount(count - 1);
+      await this.logNetworkDuring(async () => {
+        await this.deleteRow(rows.first());
+        // The toast means the server confirmed the delete; without it the page can be left or closed while the
+        // request is still pending and the row comes back.
+        await expect(this.toast(MESSAGES.deleted)).toBeVisible();
+        await expect(rows).toHaveCount(count - 1);
+      });
       await this.dismissToasts();
     }
     throw new Error('Could not clear reviews — delete kept leaving rows behind');
+  }
+
+  /**
+   * Run `action` and print the app's API calls made meanwhile (method, URL, status; body for non-GET calls),
+   * so a delete the UI accepts but the server doesn't apply shows up in the log, also when `action` throws.
+   */
+  private async logNetworkDuring(action: () => Promise<void>) {
+    const lines: Promise<string>[] = [];
+    const onResponse = (response: Response) => {
+      const request = response.request();
+      if (!['xhr', 'fetch'].includes(request.resourceType())) return;
+      lines.push(
+        (async () => {
+          const call = `${request.method()} ${response.url()} -> ${response.status()}`;
+          if (request.method() === 'GET') return call;
+          const body = await response.text().catch(() => '(body unavailable)');
+          return `${call} ${body.slice(0, 300)}`;
+        })(),
+      );
+    };
+    const onFailed = (request: Request) => {
+      lines.push(Promise.resolve(`${request.method()} ${request.url()} FAILED: ${request.failure()?.errorText}`));
+    };
+    this.page.on('response', onResponse);
+    this.page.on('requestfailed', onFailed);
+    try {
+      await action();
+    } finally {
+      this.page.off('response', onResponse);
+      this.page.off('requestfailed', onFailed);
+      for (const line of await Promise.all(lines)) console.log(`[cleanup]   ${line}`);
+    }
   }
 
   // ------------------------------------------------------------------ toasts
