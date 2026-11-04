@@ -10,6 +10,15 @@ export function todayUs(date = new Date()): string {
   return `${mm}/${dd}/${date.getFullYear()}`;
 }
 
+/**
+ * Dates the app may stamp on a row created "now": today on this PC, or today in UTC. The app dates rows with its
+ * server clock, which is ahead of a US evening PC (a review made at 11 PM shows tomorrow's date).
+ */
+export function submittedDateCandidates(now = new Date()): string[] {
+  const utc = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return [...new Set([todayUs(now), todayUs(utc)])];
+}
+
 /** Parse the app's MM/DD/YYYY into a Date (for chronological comparison). */
 export function parseUsDate(value: string): Date {
   const [mm, dd, yyyy] = value.split('/').map(Number);

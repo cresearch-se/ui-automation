@@ -131,9 +131,14 @@ function readRunLog(): RunLog | null {
   const lines = text.split('\n');
 
   // The list reporter prints a test's own output BEFORE its result line, so output belongs to the next result.
-  const RESULT = /^\s*([✓✔✘✗×±-])\s+\d+\s+(.*)$/u;
-  const OUTPUT_LINE = /^\s*(\[cleanup\]|Teardown could not delete)/;
-  const STATUS: Record<string, string> = { '✓': 'passed', '✔': 'passed', '✘': 'FAILED', '✗': 'FAILED', '×': 'FAILED', '±': 'flaky', '-': 'skipped' };
+  // A result line is "<symbol> <n> [project] › ...". Match on the "[project]" part, not the symbol: a Windows
+  // console in the wrong code page prints ✓ as "Γ£ô" and ✘ as "Γ£ÿ".
+  const RESULT = /^\s*(\S+)\s+\d+\s+(\[[\w-]+\].*)$/u;
+  const OUTPUT_LINE = /^\s*(\[cleanup\]|\[load\]|Teardown could not delete)/;
+  const statusOf = (symbol: string) =>
+    /✓|✔|ô$/.test(symbol) ? 'passed' : /✘|✗|×|ÿ$/.test(symbol) ? 'FAILED' : /±/.test(symbol) ? 'flaky' : symbol === '-' ? 'skipped' : symbol;
+  // The same garbling hits the separators in the test titles.
+  const fixText = (s: string) => s.replace(/ΓÇ║/g, '›').replace(/ΓÇö/g, '—').replace(/ΓåÆ/g, '→');
 
   const tests: LoggedTest[] = [];
   let pending: string[] = [];
@@ -141,7 +146,7 @@ function readRunLog(): RunLog | null {
   for (const line of lines) {
     const result = line.match(RESULT);
     if (result) {
-      tests.push({ status: STATUS[result[1]] ?? result[1], title: result[2].trim(), output: pending });
+      tests.push({ status: statusOf(result[1]), title: fixText(result[2]).trim(), output: pending });
       pending = [];
       afterTeardown = false;
     } else if (OUTPUT_LINE.test(line)) {

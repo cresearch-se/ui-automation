@@ -95,8 +95,11 @@ export class ReviewTabPage {
   // ------------------------------------------------------------------ navigation
 
   async goto() {
+    const started = Date.now();
     await this.page.goto(this.config.route);
     await this.waitUntilLoaded();
+    const seconds = Math.round((Date.now() - started) / 1000);
+    if (seconds >= 10) console.log(`[load] ${this.config.route} ready after ${seconds}s`); // slow staging shows up in the log
   }
 
   /** The SPA renders behind a spinner; wait for the form AND for the table to show rows or "No data". */

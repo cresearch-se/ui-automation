@@ -32,7 +32,7 @@ import {
   optionText,
   type OfficeHead,
 } from '../data/officeHeadReviews.data';
-import { compareText, compareUsDates, isSorted, normalize, stamped, todayUs } from '../utils/text';
+import { compareText, compareUsDates, isSorted, normalize, stamped, submittedDateCandidates } from '../utils/text';
 
 // ---------------------------------------------------------------------------------------------------
 // Shared assertions (used by several tests)
@@ -63,7 +63,7 @@ async function expectRowValues(reviews: OfficeHeadReviewsPage, row: ReturnType<O
   await expect(reviews.cell(row, COLUMN.office)).toHaveText(head.office);
   await expect(reviews.cell(row, COLUMN.period)).toHaveText(currentReviewPeriod());
   await expect(reviews.cell(row, COLUMN.comments)).toHaveText(comments);
-  await expect(reviews.cell(row, COLUMN.date)).toHaveText(todayUs());
+  await expect(reviews.cell(row, COLUMN.date)).toHaveText(new RegExp(`^(${submittedDateCandidates().join('|')})$`));
 }
 
 // ===================================================================================================
