@@ -416,6 +416,7 @@ test.describe('Office Head Reviews — flows that change data', () => {
     await reviews.createReview(FLOW_HEAD, tag);
 
     await reviews.openFilter('Review Period');
+    await expect(reviews.filterOptions().first()).toBeVisible(); // the list renders a moment after the popup opens
     const options = (await reviews.filterOptions().allInnerTexts()).map(normalize);
     expect(options).toContain(currentReviewPeriod()); // count not asserted: past periods can also appear
     for (const option of options) expect(option).toMatch(REVIEW_PERIOD_FORMAT);
