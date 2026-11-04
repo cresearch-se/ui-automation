@@ -4,10 +4,11 @@ App knowledge: see [app-notes.md](app-notes.md). Role: **officer**. Project: `te
 Route: `officeheadreview`.
 
 ## Status (2026-11-04)
-Implemented in `tests/office-head-reviews.spec.ts` (42 tests, all green on staging). Not covered yet: toast
-auto-dismiss / × button (3.1), Reset disabled until a value is ticked (8.2), blank form after saving an edit
-(4.4), >30 rows (9.2). Behaviours confirmed by the green run: 2.5 (errors clear on change), 4.4b (Cancel
-returns the form to blank), 5.2 (the prompt disappears after No). Run routine and findings: `app-notes.md`.
+Implemented in `tests/office-head-reviews.spec.ts` (45 tests; the first 42 were green on staging, the 3 added
+2026-11-04 — toast × button and auto-dismiss (3.1), Reset disabled until a value is ticked (8.2) — plus the blank
+form after saving an edit (4.4) added to the Edit-icon test, still need a first run). Not covered: >30 rows (9.2).
+The former `expect.soft` ASSUMPTION checks (2.5, 4.4b, 5.2) are normal assertions now. Save calls are logged as
+`[save] POST ... -> 200 (N.Ns)`. Run routine and findings: `app-notes.md`.
 
 ## Conventions for all scenarios
 - **Seed:** open `officeheadreview`, wait for the Review Period dropdown and My Submissions table.

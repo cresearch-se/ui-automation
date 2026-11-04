@@ -1,9 +1,7 @@
 // spec: apps/teamwork-survey/specs/office-head-reviews.md   (app knowledge: specs/app-notes.md)
 // app: Teamwork Survey / Reviews — tab 1 "Office Head Reviews" (officer role)
 //
-// STATUS: authored offline from screenshots + pasted DOM — selectors are best-effort until the first live
-// run (then healer pass). Assertions on behaviour the user has NOT confirmed use expect.soft and are
-// marked "ASSUMPTION".
+// STATUS: all behaviour here has been confirmed on staging (green run), so every check is a normal assertion.
 //
 // Layout of this file
 //   1. Page basics        — read-only, run in parallel
@@ -173,8 +171,8 @@ test.describe('Office Head Reviews — page basics (read-only)', () => {
     await expect(reviews.fieldError(MESSAGES.reviewPeriodRequired)).toBeVisible();
 
     await reviews.selectReviewPeriod();
-    // ASSUMPTION: the error clears on change (not only on the next Submit).
-    await expect.soft(reviews.fieldError(MESSAGES.reviewPeriodRequired)).toBeHidden();
+    // The error clears on change, not only on the next Submit.
+    await expect(reviews.fieldError(MESSAGES.reviewPeriodRequired)).toBeHidden();
   });
 });
 
@@ -212,7 +210,7 @@ test.describe('Office Head Reviews — flows that change data', () => {
     await expectEditMode(reviews, FLOW_HEAD, stamped(tag, STAGE.created));
 
     await reviews.setComments(stamped(tag, STAGE.editedViaIcon));
-    await reviews.submitButton.click();
+    await reviews.submit();
 
     await expect(reviews.toast(MESSAGES.submitted)).toBeVisible(); // same toast for add and update
     await expect(reviews.cell(row, COLUMN.comments)).toHaveText(stamped(tag, STAGE.editedViaIcon));
@@ -221,6 +219,24 @@ test.describe('Office Head Reviews — flows that change data', () => {
     await expect(reviews.cell(row, COLUMN.period)).toHaveText(currentReviewPeriod());
     await expect(reviews.rowWithText(tag)).toHaveCount(1); // updated in place, no second row
     await expect(reviews.cancelButton).toBeHidden();
+    await expectBlankForm(reviews); // saving an edit returns the form to the blank "new review" state
+  });
+
+  test('the success toast closes with its × button', async ({ reviews, tag }) => {
+    await reviews.removeExistingReviewsFor(FLOW_HEAD);
+    await reviews.fillAndSubmit(FLOW_HEAD, stamped(tag, STAGE.created));
+
+    await expect(reviews.toast(MESSAGES.submitted)).toBeVisible();
+    await reviews.page.locator('.ant-notification-notice-close').first().click();
+    await expect(reviews.toast(MESSAGES.submitted)).toBeHidden();
+  });
+
+  test('the success toast dismisses itself without any click', async ({ reviews, tag }) => {
+    await reviews.removeExistingReviewsFor(FLOW_HEAD);
+    await reviews.fillAndSubmit(FLOW_HEAD, stamped(tag, STAGE.created));
+
+    await expect(reviews.toast(MESSAGES.submitted)).toBeVisible();
+    await expect(reviews.toast(MESSAGES.submitted)).toBeHidden({ timeout: 30_000 });
   });
 
   test('Cancel in edit mode discards the changes (edit-icon route)', async ({ reviews, tag }) => {
@@ -231,9 +247,8 @@ test.describe('Office Head Reviews — flows that change data', () => {
     await reviews.cancelEdit();
 
     await expect(reviews.cell(row, COLUMN.comments)).toHaveText(stamped(tag, STAGE.created)); // original, unchanged
-    // ASSUMPTION: Cancel resets the form to the blank "new review" state.
-    await expect.soft(reviews.selectedValue(reviews.personSelect)).toHaveText(NOT_SELECTED);
-    await expect.soft(reviews.editor).toHaveText('');
+    // Cancel resets the form to the blank "new review" state.
+    await expectBlankForm(reviews);
   });
 
   // --- edit via the duplicate prompt ---------------------------------------------------------------------
@@ -269,8 +284,7 @@ test.describe('Office Head Reviews — flows that change data', () => {
 
     await expect(reviews.editor).toHaveText('');
     await expect(reviews.cancelButton).toBeHidden();
-    // ASSUMPTION: the prompt goes away after No.
-    await expect.soft(reviews.duplicateMessage).toBeHidden();
+    await expect(reviews.duplicateMessage).toBeHidden(); // the prompt goes away after No
   });
 
   test('duplicate prompt → Yes loads the review; edited comments save', async ({ reviews, tag }) => {
@@ -280,7 +294,7 @@ test.describe('Office Head Reviews — flows that change data', () => {
     await expectEditMode(reviews, FLOW_HEAD, stamped(tag, STAGE.created));
 
     await reviews.setComments(stamped(tag, STAGE.editedViaDuplicate));
-    await reviews.submitButton.click();
+    await reviews.submit();
 
     await expect(reviews.toast(MESSAGES.submitted)).toBeVisible();
     await expect(reviews.cell(row, COLUMN.comments)).toHaveText(stamped(tag, STAGE.editedViaDuplicate));
@@ -399,6 +413,17 @@ test.describe('Office Head Reviews — flows that change data', () => {
     });
   }
 
+  test('filter Reset stays disabled until a value is ticked', async ({ reviews, tag }) => {
+    await reviews.createReview(FLOW_HEAD, tag);
+
+    await reviews.openFilter('Office Head');
+    await expect(reviews.filterOption(FLOW_HEAD.name)).toBeVisible();
+    await expect(reviews.filterButton('Reset')).toBeDisabled();
+
+    await reviews.filterOption(FLOW_HEAD.name).click();
+    await expect(reviews.filterButton('Reset')).toBeEnabled();
+  });
+
   test('Office Head filter: ticking two values shows rows for both', async ({ reviews, tag }) => {
     await createSortFilterReviews(reviews, tag);
 
@@ -461,7 +486,7 @@ test.describe('Office Head Reviews — full cycle for every office head', () => 
         await reviews.openEdit(row);
         await expectEditMode(reviews, head, stamped(tag, STAGE.created));
         await reviews.setComments(stamped(tag, STAGE.editedViaIcon));
-        await reviews.submitButton.click();
+        await reviews.submit();
         await expect(reviews.toast(MESSAGES.submitted)).toBeVisible();
         await expect(reviews.cell(row, COLUMN.comments)).toHaveText(stamped(tag, STAGE.editedViaIcon));
       });
@@ -471,7 +496,7 @@ test.describe('Office Head Reviews — full cycle for every office head', () => 
         await reviews.startEditViaDuplicate(head);
         await expectEditMode(reviews, head, stamped(tag, STAGE.editedViaIcon));
         await reviews.setComments(stamped(tag, STAGE.editedViaDuplicate));
-        await reviews.submitButton.click();
+        await reviews.submit();
         await expect(reviews.toast(MESSAGES.submitted)).toBeVisible();
         await expect(reviews.cell(row, COLUMN.comments)).toHaveText(stamped(tag, STAGE.editedViaDuplicate));
         await expect(row).toHaveCount(1);

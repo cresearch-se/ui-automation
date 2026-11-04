@@ -134,7 +134,7 @@ function readRunLog(): RunLog | null {
   // A result line is "<symbol> <n> [project] › ...". Match on the "[project]" part, not the symbol: a Windows
   // console in the wrong code page prints ✓ as "Γ£ô" and ✘ as "Γ£ÿ".
   const RESULT = /^\s*(\S+)\s+\d+\s+(\[[\w-]+\].*)$/u;
-  const OUTPUT_LINE = /^\s*(\[cleanup\]|\[load\]|Teardown could not delete)/;
+  const OUTPUT_LINE = /^\s*(\[cleanup\]|\[save\]|\[load\]|Teardown could not delete)/;
   const statusOf = (symbol: string) =>
     /✓|✔|ô$/.test(symbol) ? 'passed' : /✘|✗|×|ÿ$/.test(symbol) ? 'FAILED' : /±/.test(symbol) ? 'flaky' : symbol === '-' ? 'skipped' : symbol;
   // The same garbling hits the separators in the test titles.

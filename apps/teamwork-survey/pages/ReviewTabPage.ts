@@ -245,7 +245,18 @@ export class ReviewTabPage {
         );
       }
     }
-    await this.submitButton.click();
+    await this.submit();
+  }
+
+  /**
+   * Click Submit (add or update) and give the server up to 30s to answer, logging the API calls with their timing
+   * so a slow save shows up as `[save] POST ... -> 200 (14.8s)`. Does not assert: tests assert the toast / row.
+   */
+  async submit() {
+    await this.logNetworkDuring(async () => {
+      await this.submitButton.click();
+      await this.toast(MESSAGES.submitted).waitFor({ timeout: 30_000 }).catch(() => {});
+    }, 'save');
   }
 
   private async fillForm(person: OfficeHead, comments: string, period: string) {
@@ -392,14 +403,16 @@ export class ReviewTabPage {
    * Run `action` and print the app's API calls made meanwhile (method, URL, status; body for non-GET calls),
    * so a delete the UI accepts but the server doesn't apply shows up in the log, also when `action` throws.
    */
-  private async logNetworkDuring(action: () => Promise<void>) {
+  private async logNetworkDuring(action: () => Promise<void>, label = 'cleanup') {
     const lines: Promise<string>[] = [];
+    const started = Date.now();
     const onResponse = (response: Response) => {
       const request = response.request();
       if (!['xhr', 'fetch'].includes(request.resourceType())) return;
+      const seconds = ((Date.now() - started) / 1000).toFixed(1);
       lines.push(
         (async () => {
-          const call = `${request.method()} ${response.url()} -> ${response.status()}`;
+          const call = `${request.method()} ${response.url()} -> ${response.status()} (${seconds}s)`;
           if (request.method() === 'GET') return call;
           const body = await response.text().catch(() => '(body unavailable)');
           return `${call} ${body.slice(0, 300)}`;
@@ -416,7 +429,7 @@ export class ReviewTabPage {
     } finally {
       this.page.off('response', onResponse);
       this.page.off('requestfailed', onFailed);
-      for (const line of await Promise.all(lines)) console.log(`[cleanup]   ${line}`);
+      for (const line of await Promise.all(lines)) console.log(`[${label}]   ${line}`);
     }
   }
 
