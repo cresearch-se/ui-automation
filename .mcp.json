@@ -6,6 +6,10 @@
         "playwright",
         "run-test-mcp-server"
       ]
+    },
+    "atlassian": {
+      "type": "sse",
+      "url": "https://mcp.atlassian.com/v1/sse"
     }
   }
 }

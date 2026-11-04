@@ -1,5 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Load a gitignored `.env` (Node 20.12+ built-in, no dotenv needed). Real env vars win; missing file is fine.
+try {
+  process.loadEnvFile('.env');
+} catch {
+  /* no .env — rely on real environment variables */
+}
+
 /**
  * App credentials (e.g. COMP_APP_USERNAME / COMP_APP_PASSWORD — see apps/comp-app/auth.setup.ts)
  * are read from the environment. Either export them as real env vars, or install dotenv
@@ -77,6 +84,35 @@ export default defineConfig({
         storageState: 'playwright/.auth/comp-app.json',
       },
       dependencies: ['comp-app-setup'],
+    },
+
+    /* --- Teamwork Survey / Reviews app (teamwork-survey) --------------------------------
+       Auth is Windows integrated (NTLM, domain CRESEARCH) — the browser gets a "Windows Security"
+       sign-in prompt. `httpCredentials` answers that challenge automatically, so there is no setup
+       project and no storageState. Needs TEAMWORK_SURVEY_USERNAME (CRESEARCH\user) / _PASSWORD in .env.
+       Run: npx playwright test --project=teamwork-survey                                       */
+    {
+      name: 'teamwork-survey',
+      testDir: './apps/teamwork-survey/tests',
+      expect: { timeout: 15_000 }, // staging saves can take >5s; Playwright's default is 5s
+      // The data-changing tests share staging rows (one head's review), so a file runs in order in ONE worker.
+      fullyParallel: false,
+      use: {
+        ...devices['Desktop Edge'],
+        channel: 'msedge',
+        baseURL: 'https://appstaging.cornerstone.com/reviews/',
+        // Only send explicit credentials when configured; on a domain-joined laptop leave them unset
+        // so Windows signs in silently (empty credentials would override that).
+        ...(process.env.TEAMWORK_SURVEY_USERNAME && process.env.TEAMWORK_SURVEY_PASSWORD
+          ? {
+              httpCredentials: {
+                username: process.env.TEAMWORK_SURVEY_USERNAME,
+                password: process.env.TEAMWORK_SURVEY_PASSWORD,
+                origin: 'https://appstaging.cornerstone.com',
+              },
+            }
+          : {}),
+      },
     },
 
     /* --- GCC Compare SharePoint Permissions (gcc-sharepoint) ---------------------------
