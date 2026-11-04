@@ -22,3 +22,4 @@ gcc-permissions.csv
 
 # Output of apps/teamwork-survey/tests/dump-page.spec.ts (split-brain workflow)
 teamwork-dump/
+run-log.txt
