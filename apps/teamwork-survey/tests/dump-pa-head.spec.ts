@@ -20,9 +20,16 @@ const OUT = 'teamwork-dump';
 test('dump practice head reviews tab', async ({ page }) => {
   test.setTimeout(240_000);
   fs.mkdirSync(OUT, { recursive: true });
+  // Reads (innerText etc.) wait for the element for as long as the test runs unless told otherwise: cap them, so one
+  // missing element costs 15s and becomes an ERROR line instead of hanging the whole dump.
+  page.setDefaultTimeout(15_000);
   const report: string[] = [];
-  const add = (title: string, body: string | string[]) =>
+  // Written after every section, so a hang or crash still leaves everything gathered so far.
+  const save = () => fs.writeFileSync(path.join(OUT, 'pa-head.md'), report.join('\n\n'), 'utf-8');
+  const add = (title: string, body: string | string[]) => {
     report.push(`## ${title}\n${Array.isArray(body) ? body.map((l) => `- ${l}`).join('\n') || '(none)' : body}`);
+    save();
+  };
   const attempt = async (title: string, work: () => Promise<string | string[]>) => {
     try {
       add(title, await work());
@@ -34,6 +41,7 @@ test('dump practice head reviews tab', async ({ page }) => {
   const tab = new PracticeHeadReviewsPage(page);
   await tab.goto();
   report.push(`# Practice Head Reviews dump\n- URL: ${page.url()}\n- Current review period: ${currentReviewPeriod()}`);
+  save();
 
   await attempt('Tab names', async () => (await tab.tabLinks.allInnerTexts()).map(normalize));
   await attempt('Visible form labels', async () => await tab.formLabels());
@@ -143,8 +151,6 @@ test('dump practice head reviews tab', async ({ page }) => {
     });
   }
 
-  const out = report.join('\n\n');
-  fs.writeFileSync(path.join(OUT, 'pa-head.md'), out, 'utf-8');
-  await page.screenshot({ path: path.join(OUT, 'pa-head.png'), fullPage: true });
-  console.log(`\n${out}\n\nWrote ${OUT}/pa-head.md`);
+  await page.screenshot({ path: path.join(OUT, 'pa-head.png'), fullPage: true }).catch(() => {});
+  console.log(`\n${report.join('\n\n')}\n\nWrote ${OUT}/pa-head.md`);
 });
