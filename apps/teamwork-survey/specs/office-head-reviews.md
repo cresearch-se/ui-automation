@@ -3,6 +3,12 @@
 App knowledge: see [app-notes.md](app-notes.md). Role: **officer**. Project: `teamwork-survey`.
 Route: `officeheadreview`.
 
+## Status (2026-11-04)
+Implemented in `tests/office-head-reviews.spec.ts` (42 tests, all green on staging). Not covered yet: toast
+auto-dismiss / × button (3.1), Reset disabled until a value is ticked (8.2), blank form after saving an edit
+(4.4), >30 rows (9.2). Behaviours confirmed by the green run: 2.5 (errors clear on change), 4.4b (Cancel
+returns the form to blank), 5.2 (the prompt disappears after No). Run routine and findings: `app-notes.md`.
+
 ## Conventions for all scenarios
 - **Seed:** open `officeheadreview`, wait for the Review Period dropdown and My Submissions table.
 - **Review period:** other tests read the option from the dropdown at runtime (don't hardcode the year);
@@ -10,7 +16,10 @@ Route: `officeheadreview`.
 - **Office head option text** = `Last, First - Office`; table shows `Last, First` + Office separately
   (split option on the last ` - `).
 - **Data hygiene:** staging already has rows. Never assume an empty table. Tests that create a review
-  delete it at the end (or use a unique comment, e.g. `UITEST <timestamp>`, to find their own row).
+  delete it at the end. Comments are `UITEST-<id> <stage>` (`created`, `edited via icon`,
+  `edited via duplicate prompt`, `edit that gets cancelled`) so teardown finds the row by the tag and a stale
+  row shows where its test stopped. Staging is a test environment: the start-of-test cleanup deletes ANY
+  current-year review of the head under test, tagged or not.
 - **Serial where data is shared:** submit → edit → duplicate → delete flows on the same head run serially.
 - ❓ = message text not yet captured; assert on role/visibility until the dump supplies exact text.
 
@@ -119,11 +128,9 @@ Route: `officeheadreview`.
      original comments and restore, or skip deletion.
 Note: with >30 heads, rows span pages — use the filter/search or page-size selector to find rows.
 
-## Open questions (resolve via dump-page)
-- All message texts are known now (add/update toast, delete toast, delete confirm, duplicate, validation).
-- After **No** in the duplicate message: is the message dismissed, and is the selection kept?
-- Edit-mode Submit label / Cancel.
-- Default sort order of My Submissions.
-- Is the logged-in user excluded from the Office Head list?
-- Is there a Cancel in edit mode? Exact update-toast text.
-- Full Office Head option list (count, names) — needed for scenario 10.
+## Open questions
+- All message texts are known (add/update toast, delete toast, delete confirm, duplicate, validation).
+- Resolved by the green run: the prompt is dismissed after **No**; edit mode keeps the `Submit` label and
+  adds **Cancel**; the logged-in user is not in the Office Head list; the full list is the 9 heads in order.
+- Still open: whether the selection is kept after **No**; default sort order of My Submissions; Office /
+  Review Period filter option source (fixed list vs rows); behaviour with more than 30 rows.

@@ -6,15 +6,14 @@ nobody has to re-explain the app. **Source of truth for app behaviour; test plan
 > Status legend: ✅ confirmed by user/screenshot · ❓ open question / not yet described
 
 ## Scope assumptions (from user)
-- **Review period rule (data-validation check):** an admin adds the period on another page, and it must
-  always be exactly **`January 01, <current year> - December 31, <current year>`** (e.g. 2026 →
-  `January 01, 2026 - December 31, 2026`). Only **one** period is expected. We **assert this** so a wrong
-  admin entry (wrong year, wrong dates, extra period) is flagged as a test failure.
-  - Compute the expected string from the current date at runtime (`new Date().getFullYear()`), don't hardcode.
-  - Screenshot 6 showed a `2025` period — user confirmed that was **just an example**; ignore it. The
-    live dropdown will show the current-year range.
-  - All **other** tests should still read the option from the dropdown at runtime (so one bad period
-    only fails the dedicated check, not the whole suite).
+- **Review period rule (data-validation check):** an admin adds the period on another page. The dropdown
+  must **include** the standard period **`January 01, <current year> - December 31, <current year>`**
+  (e.g. 2026 → `January 01, 2026 - December 31, 2026`). ✅ **Decided 2026-10-30:** other periods are allowed
+  and ignored (staging also lists `January 01, 2025 - December 31, 2025` and
+  `October 01, 2026 - October 09, 2026`); the earlier "exactly one period" rule was dropped. A missing
+  standard period fails the dedicated check ("admin must configure the period").
+  - Compute the expected string from the current date at runtime (`currentReviewPeriod()`), don't hardcode.
+  - All **other** tests use that standard period and read other options from the dropdown at runtime.
 - **Review periods are managed by an admin on a separate page** (out of scope for now). For testing,
   treat **whatever options are currently in the Review Period dropdown as the valid set** — don't
   hardcode a year; read the options from the dropdown at runtime.
@@ -166,6 +165,8 @@ Default tab on load: Office Head Reviews (highlighted blue/active).
   - `Office Head is required.`
   - `Comments are required.` (note: "are", not "is")
 - Messages are inline text, not an alert/toast.
+- ✅ **Verified by the live run (2026-11-03):** a required-field error clears as soon as the field is
+  filled (on change, not only on the next Submit).
 
 ### My Submissions — what a row looks like ✅ (screenshot 2)
 | Column | Example |
@@ -195,8 +196,12 @@ Default tab on load: Office Head Reviews (highlighted blue/active).
 - **Yes** → ✅ **loads the existing review into the form** (edit mode, same as the Action ▸ Edit icon:
   period + head disabled, existing comments prefilled; only Comments editable). Jira's "override the
   comments" = you change the comments and save.
-- **No** → ✅ **nothing is loaded into the form** (existing comments are not filled in). ❓ minor:
-  whether the dropdown selection stays or resets, and whether the message disappears.
+- **No** → ✅ **nothing is loaded into the form** (existing comments are not filled in). ✅ **Verified by
+  the live run (2026-11-03):** the prompt disappears after No. ❓ minor: whether the dropdown selection
+  stays or resets.
+- ✅ **While the prompt is up, the Submit button is disabled** (greyed out until Yes or No is clicked), and
+  it stays disabled while a submission is in progress. A test that fills the form for a head that already
+  has a review therefore hangs on `Submit.click()` — clear the head's current-year rows first.
 - Seen with: Review Period `January 01, 2025 - December 31, 2025`, Office Head
   `Schmirer, Gary - Boston` (so **multiple review periods exist**, incl. 2025 — the earlier 2026-only
   assumption was just the data seen; Jira's "Schimmit Gary" is spelled `Schmirer, Gary` in the app).
@@ -217,8 +222,8 @@ Both routes must be covered by tests.
 - ✅ **A `Cancel` button appears next to Submit in edit mode only** (screenshot 13; white/outline button in
   the previously empty second `.ant-space-item`; absent in normal "new review" mode). ✅ Confirmed: **Cancel
   exits edit mode and discards changes** — if you edit the comments and then click Cancel, the edits are
-  NOT saved (row keeps its original comments). ❓ minor: exact form state after Cancel (assumed blank,
-  dropdowns re-enabled) and whether a toast shows.
+  NOT saved (row keeps its original comments). ✅ **Verified by the live run (2026-11-03):** after Cancel
+  the form is back to blank (dropdowns `----- Select -----`, Comments empty). ❓ minor: whether a toast shows.
 - ✅ In edit mode (screenshot 13) both dropdowns look **greyed out** (antd disabled: class
   `ant-select-disabled`) and show the row's values: `January 01, 2026 - December 31, 2026` and
   `Brain, Carlos - Silicon Valley` (note: the edit-mode Office Head text is `Last, First - Office`),
@@ -250,6 +255,51 @@ Both routes must be covered by tests.
 - Before the full cycle, **delete any existing current-period reviews for the 9 heads** (e.g. the
   `Brain, Carlos` and `Bickford, Eric` 2026 rows). Past-period rows (2025) have no delete button → leave them.
 - After each test, delete whatever it created so the table returns to its starting state.
+- ✅ **Staging is a test environment (user, 2026-11-04): it is fine to delete ANY current-year review of the
+  9 heads, with or without a test tag.** `removeExistingReviewsFor(head)` runs at the start of every test
+  that submits and deletes every row with a trash icon matching name + office + current period.
+  The fixture teardown (`deleteRowsWithTag`) deletes only rows carrying that test's `UITEST-…` tag.
+- Test comments are stamped with how far the review got: `<tag> created`, `<tag> edited via icon`,
+  `<tag> edited via duplicate prompt`, `<tag> edit that gets cancelled`. A stale row on staging shows where
+  its test stopped.
+
+## Live-run findings (first full green run: 2026-11-04, 42 tests passed)
+- **API** (base `https://appstaging.cornerstone.com/reviews/api/api/`): deleting a review is
+  `POST DeleteOfficeHeadReview` (200, empty body); the page then refetches the table with
+  `GET GetOfficeHeadMySubmissions` (200). The delete toast `Review has been successfully deleted.` means the
+  server accepted the delete.
+- **Table loads asynchronously.** antd can show "No data" (or no rows yet) while the submissions request is
+  still in flight. A cleanup that counts rows at that moment sees nothing and skips, which left stale rows
+  and made the next test's "already exists" prompt disable Submit. `waitUntilLoaded` therefore also waits
+  for `networkidle` (capped at 15 s). This was the root cause of the long "Mascari/Zurek row is not
+  deleted" investigation.
+- **Server clock stamps Date Submitted, not the PC clock.** A review made at ~11 PM US time showed
+  tomorrow's date (UTC). Tests accept either the PC date or the UTC date (`submittedDateCandidates()`).
+- **Staging is slow:** saves can take over 5 s (Playwright's default expect timeout), so the
+  `teamwork-survey` project uses `expect.timeout: 15 s`. Test timeouts: 90 s (data tests), 150 s (full cycle).
+- **Comments field:** Jodit only updates the form when the editor loses focus; `setComments` ends with a Tab.
+  Jodit's counter does not count spaces.
+- **Dropdowns** are virtual lists inside `<body>` portals; a second dropdown holder stays in the DOM briefly,
+  so wait for the options to be gone (count 0) after choosing an option.
+- **Column filter popup:** the checkbox list renders a moment after the popup opens — wait for the first
+  option before reading the list.
+- **Delete popover:** `.ant-popover:not(.ant-popover-hidden)`; click `OK`, wait for the toast, then for the
+  row count to drop by one.
+- **Worker shutdown:** after a long data-changing run Playwright sometimes waits the full
+  `worker-0 process did not exit within 300000ms` (5 min) and force-kills the worker; results are valid.
+  The read-only group exits in about a minute, so the cause sits with the data-changing tests/cleanup
+  code (still being narrowed down).
+
+### Verified behaviours (by passing live tests, 2026-11-04)
+Tab 1 form defaults, 4 officer tabs, three fields + labels, standard period present, 9 office heads in order,
+counter, six headers, sort/filter controls on the right columns only, the three required-field errors (and
+each alone), error clears on change, submit (toast + row + blank form), head stays selectable, edit by icon,
+Cancel in both edit routes, duplicate prompt (shown / not shown / No / Yes), delete (Cancel keeps, OK removes +
+toast + head reviewable again), past-period rows have no action buttons, sort by Office Head / Office /
+Date Submitted (asc, desc), Office Head / Office / Review Period filters (search, tick, OK, Reset), two-value
+filter, pagination `30 / page`, full cycle for all 9 heads.
+- Caveat: the Date Submitted sort only proves anything while an older row (Brain's 2025 review, `02/24/2026`)
+  is in the table — new rows all carry today's date.
 
 ### Full-coverage requirement ✅ (confirmed: all 9 heads, full cycle)
 - For **all 9 heads**: submit → edit (icon) → edit (duplicate/Yes route) → delete. Not just submit.
@@ -260,8 +310,12 @@ Both routes must be covered by tests.
 
 ### Behaviours still unknown (ask / verify)
 - All toast + delete-confirmation texts are now known (update toast = add toast).
-- ❓ Is the logged-in user excluded from the Office Head list?
+- ✅ The logged-in user (Karumuri, Sowji) is not in the Office Head list (the 9-entry check passes).
 - ❓ Table default sort.
+- ❓ Office / Review Period filter option source (fixed list vs the rows).
+- ❓ Behaviour with more than 30 rows (needs 31 reviews; not automated).
+- ❓ Toast auto-dismiss timing and the × button; Reset disabled until a value is ticked; form blank after
+  saving an edit (no tests for these yet).
 - ❓ Cleanup: tests create data on staging — delete rows at the end (Delete flow) to stay re-runnable.
 
 ## Tabs 2 & 4 (Practice Head Reviews, Principal Teamwork Survey)
@@ -362,6 +416,17 @@ and/or opportunities for growth."*; status bar `Chars: 0` / `Words: 0`; hidden `
 ## Test-authoring notes
 - Workflow is split-brain: I can't reach the app; user runs tests locally and pastes back
   `dump-page` output / `error-context.md`. `apps/teamwork-survey/tests/dump-page.spec.ts` already exists.
+- **Run + report routine (Windows PowerShell):**
+  `npx playwright test office-head-reviews --project=teamwork-survey --workers=1 --reporter=list 2>&1 | Tee-Object run-log.txt`
+  then `npm run gather-failures` and paste `test-failures.md` (totals, per-test cleanup output, the test that
+  was running if the run hung, failures with page snapshots). Optional first line:
+  `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` (otherwise symbols print as `Γ£ô`; the script copes).
+  Don't pass a different `--reporter` than `list` when you want the log; `-g "<text>"` selects tests by title.
+- The data-changing tests share one head's review, so they run in order in one worker (`fullyParallel: false`
+  on the project, no `serial` mode, so one failure does not skip the rest).
+- Console lines from the code: `[cleanup] <head>: N rows on screen, M to delete`, `[cleanup] deleting …` plus
+  the delete's API calls, `[cleanup] Submit disabled …` (the retry fired), `[load] … ready after Ns`, and
+  `Teardown could not delete reviews tagged …`.
 - Test data that submits reviews mutates staging — plan cleanup (delete own submission) or use a
   dedicated review period.
 - Because tabs differ by role, tests must be tagged/guarded by role (officer vs principal).
@@ -369,6 +434,10 @@ and/or opportunities for growth."*; status bar `Chars: 0` / `Words: 0`; hidden `
   (global locators). Scope table/form locators to the active tab panel to avoid strict-mode violations.
 
 ## Change log
+- 2026-11-04 — First fully green run of tab 1 (42 passed). Recorded: cleanup root cause (table loads
+  asynchronously), server-clock dates, delete API, stage-labelled comments, verified behaviours, run routine.
+  Staging confirmed as a test environment (OK to delete any current-year review of the 9 heads).
+- 2026-10-30 — First live run: 3 review periods on staging, label colons, counter format; period rule relaxed.
 - 2026-10-28 — Created from tab 1 screenshot + user description.
 - 2026-10-28 — Added Jira-sourced tab 1 flows: officer review period, submit/confirm, duplicate
   (Yes/No), edit, delete (Yes/No), sort/filter, rating column removed, mandatory validation, loop over all
