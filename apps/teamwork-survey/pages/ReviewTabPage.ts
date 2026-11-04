@@ -25,6 +25,13 @@ export interface ReviewTabConfig {
   tabName: string;
   /** `label[for]` of the person dropdown (Office Head = `OfficerEmpNo`). */
   personFieldId: string;
+  /**
+   * Route to land on first when the tab is reached the way a user does: open the app (first tab), then click the
+   * tab. Omit to open `route` directly.
+   */
+  landingRoute?: string;
+  /** Start of the inline "review already exists" text; defaults to the Office Head wording. */
+  duplicateText?: string;
 }
 
 const EDIT_ICON = 'svg[data-icon="pen-to-square"]';
@@ -77,7 +84,7 @@ export class ReviewTabPage {
     this.submitButton = this.form.getByRole('button', { name: 'Submit', exact: true });
     this.cancelButton = this.form.getByRole('button', { name: 'Cancel', exact: true });
 
-    this.duplicateMessage = page.getByText('A review already exists for the selected office head and period');
+    this.duplicateMessage = page.getByText(config.duplicateText ?? 'A review already exists for the selected office head and period');
     this.yesButton = page.getByRole('button', { name: 'Yes', exact: true });
     this.noButton = page.getByRole('button', { name: 'No', exact: true });
 
@@ -96,7 +103,14 @@ export class ReviewTabPage {
 
   async goto() {
     const started = Date.now();
-    await this.page.goto(this.config.route);
+    if (this.config.landingRoute) {
+      await this.page.goto(this.config.landingRoute);
+      await expect(this.tabLinks.first()).toBeVisible({ timeout: 90_000 });
+      await this.tabLinks.filter({ hasText: this.config.tabName }).click();
+      await expect(this.page).toHaveURL(new RegExp(`/${this.config.route}$`));
+    } else {
+      await this.page.goto(this.config.route);
+    }
     await this.waitUntilLoaded();
     const seconds = Math.round((Date.now() - started) / 1000);
     if (seconds >= 10) console.log(`[load] ${this.config.route} ready after ${seconds}s`); // slow staging shows up in the log
