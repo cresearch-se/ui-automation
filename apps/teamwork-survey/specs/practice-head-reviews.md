@@ -4,7 +4,9 @@ App knowledge: `app-notes.md` → "Tab 2 — Practice Head Reviews". Tests: `tes
 Same flows as tab 1 (`office-head-reviews.md`); only what differs is listed here.
 
 ## Status (2026-11-05)
-Written from a live dump of staging; not yet run green. Toast texts for add/update/delete are assumed identical to tab 1.
+All green on staging (2026-11-05): 15 page-basics, 22 flows (+1 self-skip: no past-period rows exist), 20 full cycles.
+Toast texts for add/update/delete are identical to tab 1. The two exploration rows (Altuglu, Sancheti) were removed by
+the first full-cycle run, so the table starts empty.
 
 ## Conventions
 - Login lands on tab 1; the fixture opens the app and **clicks the "Practice Head Reviews" tab**.
@@ -37,5 +39,4 @@ Reset disabled until a value is ticked · two-value filter · Review Period filt
 Per head: submit → edit via Edit icon → edit via duplicate prompt (Yes) → delete OK.
 
 ## Open questions
-- Tab 2 success/delete toast wording (assumed same as tab 1) — verified by the first run.
-- Past-period rows may not exist, so that test can skip.
+- The past-period test skips itself while no past-period rows exist (true today).

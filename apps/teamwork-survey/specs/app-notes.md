@@ -342,10 +342,11 @@ Same layout and behaviour as tab 1 (form + "My Submissions" table); differences:
   this review?` with Yes / No; Submit is disabled while it is up.
 - **Delete:** popover title `Delete Review for the officer: <Last, First>`, text `Do you want to proceed to delete the
   review ?`, buttons Cancel / OK.
-- ❓ Not yet verified on tab 2: the success/delete toast texts (assumed identical to tab 1), saving, editing, deleting.
-  The first full run of `pa-head-reviews.spec.ts` verifies them.
-- Cleanup: tests delete current-year reviews of the practice head they use (staging is a test environment), so the two
-  exploration rows (Altuglu, Sancheti) disappear on the first run.
+- ✅ Verified by green runs on 2026-11-05 (15 basics, 22 flows + 1 skip, 20 full cycles): the success and delete toasts
+  are identical to tab 1; save = `POST CreateOrUpdatePAHeadReview` then `GET GetPAHeadMySubmissions`; delete =
+  `POST DeletePAHeadReview`; edit by icon and by the duplicate prompt both update the row in place.
+- Cleanup: tests delete current-year reviews of the practice head they use (staging is a test environment); the two
+  exploration rows (Altuglu, Sancheti) were removed by the first full-cycle run. Saves take ~1.5s.
 - **Virtual-list gotcha:** with 20 options only ~9 are in the DOM at once. After scrolling a dropdown to the top the
   list must be allowed to redraw before reading it (`scrollListToTop` in ReviewTabPage), else the first rows are missed.
 - **Worker shutdown wait:** Playwright can wait 5 minutes at the end of a run ("worker process did not exit within

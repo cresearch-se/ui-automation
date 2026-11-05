@@ -1,7 +1,7 @@
 // spec: apps/teamwork-survey/specs/practice-head-reviews.md   (app knowledge: specs/app-notes.md)
 // app: Teamwork Survey / Reviews — tab 2 "Practice Head Reviews" (officer role)
 //
-// STATUS: written from a live dump of staging (2026-11-05) and tab 1's proven flows; not yet run green.
+// STATUS: all behaviour here has been confirmed on staging (green runs 2026-11-05: 15 basics, 22 flows + 1 skip, 20 full cycles).
 //
 // Layout of this file
 //   1. Page basics        — read-only
