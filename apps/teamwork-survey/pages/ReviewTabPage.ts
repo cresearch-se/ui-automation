@@ -179,12 +179,20 @@ export class ReviewTabPage {
     });
   }
 
+  /** Scroll the virtual list back to the top and let it re-render, so the first read sees the first rows. */
+  private async scrollListToTop(holder: Locator) {
+    await holder.evaluate(async (el) => {
+      el.scrollTop = 0;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    });
+  }
+
   /** Read EVERY option of a dropdown (the list is virtual, so scroll and collect), then close it. */
   async readOptions(select: Locator): Promise<string[]> {
     await select.click();
     await expect(this.dropdownOptions().first()).toBeVisible();
     const holder = this.dropdownScroller();
-    await holder.evaluate((el) => { el.scrollTop = 0; });
+    await this.scrollListToTop(holder);
 
     const collected: string[] = [];
     for (let i = 0; i < 50; i++) {
@@ -203,7 +211,7 @@ export class ReviewTabPage {
     await select.click();
     await expect(this.dropdownOptions().first()).toBeVisible();
     const holder = this.dropdownScroller();
-    await holder.evaluate((el) => { el.scrollTop = 0; });
+    await this.scrollListToTop(holder);
 
     for (let i = 0; i < 50; i++) {
       const index = (await this.renderedOptionTexts()).indexOf(normalize(text));
