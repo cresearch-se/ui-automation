@@ -1,8 +1,9 @@
 // spec: apps/teamwork-survey/specs/principal-teamwork-survey.md   (app knowledge: specs/app-notes.md)
 // app: Teamwork Survey / Reviews — tab "Principal Teamwork Survey" (4th tab for this user, 5th for some others)
 //
-// STATUS: written from a live dump of staging (2026-11-05); not yet run. The two toast texts in MESSAGES are an
-// assumption until the first run prints the real ones (`[save]   toast: ...` lines in the run log).
+// STATUS: written from a live dump of staging (2026-11-05). Page basics and flows are green on staging; the toast
+// texts in MESSAGES were confirmed by the run log. Known quirk: the table drops a middle initial that the dropdown
+// shows ("Hegde, Shridhar G." -> "Hegde, Shridhar"), so a random pick of such a principal fails the name check.
 //
 // The list of principals is NOT fixed: every data-changing test picks its principal(s) at random from the dropdown
 // (never someone who already has a survey on screen) and prints the choice (`[pick] ...`).
@@ -10,8 +11,10 @@
 // Layout of this file
 //   1. Page basics        — read-only
 //   2. Flows that change data — each test creates its own tagged survey (fixture cleans up)
+//   2b. Extra checks      — persistence, blank/odd/long answers, isolation from other tabs, direct link
 //   3. Full cycle for 5 random principals — submit → edit (icon) → edit (duplicate) → delete
 
+import { type Locator } from '@playwright/test';
 import { test, expect } from '../fixtures/principalSurvey.fixture';
 import { PRINCIPAL_COLUMN, type PrincipalSurveyPage } from '../pages/PrincipalSurveyPage';
 import { type Person } from '../pages/ReviewTabPage';
@@ -561,6 +564,156 @@ test.describe('Principal Teamwork Survey — flows that change data', () => {
     const [who] = await reviews.randomPrincipals(1);
     await reviews.createReview(who, tag);
     await expect(reviews.pageSize).toHaveText(MESSAGES.defaultPageSize);
+  });
+});
+
+// ===================================================================================================
+// 2b. EXTRA CHECKS (persistence, odd input, isolation from other tabs, direct link)
+// ===================================================================================================
+test.describe('Principal Teamwork Survey — extra checks', () => {
+  test.describe.configure({ timeout: 120_000 });
+
+  /** The two other tabs that share this layout (form + My Submissions table); the third tab is not covered yet. */
+  const OTHER_REVIEW_TABS = TAB_NAMES.filter((name) => name === 'Office Head Reviews' || name === 'Practice Head Reviews');
+
+  /** Fill everything except the two answers (period, a random principal, rating). */
+  async function fillTop(reviews: PrincipalSurveyPage, who: Person, rating = '5') {
+    await reviews.selectReviewPeriod();
+    await reviews.selectPerson(who);
+    await reviews.selectRating(rating);
+  }
+
+  /** Paste text into an editor in one go (typing thousands of characters key by key is slow). */
+  async function pasteInto(reviews: PrincipalSurveyPage, editor: Locator, text: string) {
+    await editor.click();
+    await reviews.page.keyboard.insertText(text);
+    await reviews.page.keyboard.press('Tab');
+  }
+
+  // --- persistence ---------------------------------------------------------------------------------------
+  test('a saved survey is still there, unchanged, after a reload and after visiting another tab', async ({ reviews, tag }) => {
+    const [who] = await reviews.randomPrincipals(1);
+    reviews.rating = '7';
+    const row = await reviews.createReview(who, tag);
+    const comments = stamped(tag, STAGE.created);
+
+    await reviews.goto(); // full reload
+    await expectRowValues(reviews, row, who, '7', comments); // includes the MM/DD/YYYY date of today
+
+    await reviews.openTab(OTHER_REVIEW_TABS[0]);
+    await reviews.openTab(TAB_NAME);
+    await expectRowValues(reviews, row, who, '7', comments);
+  });
+
+  test('a filled but unsaved form is not kept: leaving the tab and coming back shows a blank form and no survey', async ({ reviews, tag }) => {
+    const [who] = await reviews.randomPrincipals(1);
+    await fillTop(reviews, who);
+    await reviews.setComments(stamped(tag, STAGE.created));
+    await reviews.setImprove(stamped(tag, STAGE.created));
+    await expect(reviews.cancelButton).toBeHidden(); // a new survey has nothing to cancel
+
+    await reviews.openTab(OTHER_REVIEW_TABS[0]);
+    await reviews.openTab(TAB_NAME);
+
+    await expectBlankForm(reviews);
+    await expect(reviews.rowWithText(tag)).toHaveCount(0);
+  });
+
+  // --- whitespace-only answers ----------------------------------------------------------------------------
+  // The other answer carries the tag, so if the app wrongly accepts the blank one the row is still cleaned up.
+  for (const blank of ['first', 'second'] as const) {
+    test(`an answer of only spaces in the ${blank} question counts as empty`, async ({ reviews, tag }) => {
+      const [who] = await reviews.randomPrincipals(1);
+      await fillTop(reviews, who);
+      if (blank === 'first') {
+        await reviews.setComments('     ');
+        await reviews.setImprove(stamped(tag, STAGE.created));
+      } else {
+        await reviews.setComments(stamped(tag, STAGE.created));
+        await reviews.setImprove('     ');
+      }
+
+      await reviews.submitButton.click();
+
+      await expect(reviews.errors).toHaveText([MESSAGES.commentsRequired]);
+      await expect(reviews.toast(MESSAGES.submitted)).toBeHidden();
+      await expect(reviews.rowWithText(tag)).toHaveCount(0);
+    });
+  }
+
+  // --- special characters ---------------------------------------------------------------------------------
+  test('HTML and quotes in the answers are saved and shown as plain text, and nothing runs', async ({ reviews, tag }) => {
+    const [who] = await reviews.randomPrincipals(1);
+    const comments = `${tag} <b>bold</b> & "double" 'single' <script>alert(1)</script> <img src=x onerror=alert(2)>`;
+    const dialogs: string[] = [];
+    reviews.page.on('dialog', (dialog) => {
+      dialogs.push(dialog.message());
+      void dialog.dismiss();
+    });
+
+    reviews.rating = '6';
+    await reviews.fillAndSubmit(who, comments);
+    await expect(reviews.toast(MESSAGES.submitted)).toBeVisible();
+
+    const row = reviews.rowWithText(tag);
+    await expect(row).toHaveCount(1);
+    await expectRowValues(reviews, row, who, '6', comments);
+
+    await reviews.goto(); // the stored value, not just what was typed
+    await expectRowValues(reviews, row, who, '6', comments);
+    await reviews.openEdit(row);
+    await expect(reviews.demonstratedEditor).toHaveText(comments); // comes back into the editor as the same text
+
+    expect(dialogs, 'a script in an answer ran').toEqual([]);
+  });
+
+  // --- long text ---------------------------------------------------------------------------------------------
+  test('a long answer (about 3000 characters) in each question is counted, saved and shown in full', async ({ reviews, tag }) => {
+    const [who] = await reviews.randomPrincipals(1);
+    const long = `${tag} ${'teamwork builds trust and results '.repeat(90)}`.trim();
+    const longImprove = `${tag} ${'communicate early and share credit '.repeat(90)}`.trim();
+    const nonSpaceChars = (text: string) => text.replace(/\s/g, '').length; // the counter does not count spaces
+
+    await fillTop(reviews, who, '9');
+    await pasteInto(reviews, reviews.demonstratedEditor, long);
+    await pasteInto(reviews, reviews.improveEditor, longImprove);
+    await expect(reviews.statusBars.nth(0)).toContainText(new RegExp(`chars:\\s*${nonSpaceChars(long)}(?!\\d)`, 'i'));
+    await expect(reviews.statusBars.nth(1)).toContainText(new RegExp(`chars:\\s*${nonSpaceChars(longImprove)}(?!\\d)`, 'i'));
+
+    await reviews.submit();
+    await expect(reviews.toast(MESSAGES.submitted)).toBeVisible();
+
+    const row = reviews.rowWithText(tag);
+    await expect(row).toHaveCount(1);
+    await expect(reviews.cell(row, PRINCIPAL_COLUMN.demonstrated)).toHaveText(long);
+    await expect(reviews.cell(row, PRINCIPAL_COLUMN.improve)).toHaveText(longImprove);
+    await reviews.expectRatingCell(row, '9');
+  });
+
+  // --- isolation from the other tabs -------------------------------------------------------------------------
+  test('a principal survey does not show up in the Office Head or Practice Head tables', async ({ reviews, tag }) => {
+    const [who] = await reviews.randomPrincipals(1);
+    await reviews.createReview(who, tag);
+
+    for (const name of OTHER_REVIEW_TABS) {
+      await reviews.openTab(name);
+      await expect(reviews.rowWithText(tag), `${name} must not list this survey`).toHaveCount(0);
+    }
+
+    // Back here, so the teardown (which only deletes what is on screen) can clean up.
+    await reviews.openTab(TAB_NAME);
+    await expect(reviews.rowWithText(tag)).toHaveCount(1);
+  });
+
+  // --- direct link ----------------------------------------------------------------------------------------------
+  test('opening the tab address directly lands on the Principal Teamwork Survey page', async ({ reviews }) => {
+    await reviews.page.goto(reviews.config.route);
+    await reviews.waitUntilLoaded();
+
+    await expect(reviews.page).toHaveURL(/\/principalteamworksurvey$/);
+    await expect(reviews.tabLinks.filter({ hasText: TAB_NAME })).toHaveClass(/active/);
+    await expect(reviews.banner).toBeVisible();
+    expect(await reviews.formLabels()).toEqual(FORM_LABELS);
   });
 });
 
