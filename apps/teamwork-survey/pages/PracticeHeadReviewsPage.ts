@@ -39,9 +39,12 @@ export class PracticeHeadReviewsPage extends ReviewTabPage {
     await this.page.keyboard.type(text);
   }
 
-  /** Close the open dropdown without choosing anything. */
+  /**
+   * Close the open dropdown without choosing anything. After typing, the first Escape only clears the search text and
+   * leaves the list open, so click on an empty corner of the page instead.
+   */
   async closeDropdown() {
-    await this.page.keyboard.press('Escape');
+    await this.page.mouse.click(2, 2);
     await expect(this.openDropdownOptions).toHaveCount(0);
   }
 }
