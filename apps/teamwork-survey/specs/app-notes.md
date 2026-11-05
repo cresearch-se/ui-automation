@@ -353,8 +353,35 @@ Same layout and behaviour as tab 1 (form + "My Submissions" table); differences:
   300000ms"); `$env:PWTEST_CHILD_PROCESS_TIMEOUT = "20000"` shortens it (internal setting, seen in
   `node_modules/playwright/lib/runner/index.js`).
 
-## Tab 4 — Principal Teamwork Survey
-Described as "look alike the first tab". ❓ Awaiting details; do **not** assume identical.
+## Principal Teamwork Survey ✅ (live dump 2026-11-05; 4th tab for this user, 5th for some logins)
+Route `/reviews/principalteamworksurvey`. **Always reached by clicking the tab by its NAME** (its position depends on who is
+logged in); the app opens on the first tab, so tests land there first. Same shell as tabs 1-2; differences:
+- **Blue notice above the form** (`.ant-alert-info`, exact text in `data/principalSurvey.data.ts`, BANNER_TEXT; the screen is
+  the source of truth, confirmed by the user). Note the curly apostrophe in "individual’s". Its link "Examples of Behaviors
+  That Reflect Teamwork." opens a SharePoint PDF (`target=_blank`); tests check text/target/document name, never click.
+- **Form (5 fields):** Review Period · Principal Name · **Rating** · "What would you identify as the three most important
+  teamwork behaviors this individual routinely demonstrates?" · "What two to three behaviors or activities this person might
+  do to improve his/her teamwork contribution?". Field ids: `ReviewYear`, `OfficerEmpNo`, `ReviewRating`, `Review`,
+  `Review1`. Nothing is preselected (`----- Select -----`); the editors have no placeholder text.
+- **Review period rule:** July 01 of the current fiscal year to June 30 of the next (today → `July 01, 2026 - June 30, 2027`);
+  other periods are allowed but this one is mandatory. `currentSurveyPeriod()` computes it.
+- **Rating:** dropdown 10, 9, … 1 (highest first), mandatory. Can be changed when editing.
+- **Principal Name:** searchable dropdown, `Last, First` only (no office), 98 names today, **list NOT fixed**, so tests
+  pick principals at random (never one who already has a row on screen) and print `[pick] ...`. Typing matches anywhere
+  in the name ("Abr" matches both "Abraham, Sarah" and "Antonie, Gabriela").
+- **Table (7 columns):** Principal Name (sort+filter) · Review Period (sort+filter) · Rating (sort+filter) · Behaviors
+  Demonstrated · Behaviors to Improve · Date Submitted (sort) · Action. `30 / page`. Filters list only values with rows.
+- **Validation after an empty Submit (5 messages, top to bottom):** `Review Period is required.` · `Principal Name is
+  required.` · `Rating is required.` · `Comments are required.` · `Comments are required.` (once per editor).
+- **Duplicate prompt:** `A review already exists for the selected office head and period. Do you want to edit this
+  review?` (the app still says "office head" here; Yes / No; Submit disabled while shown).
+- **Edit view:** Review Period and Principal Name disabled; Rating, both editors editable; Submit + Cancel.
+- **Delete popover:** title `Delete Survey for the officer: <Last, First>`, text `Do you want to proceed to delete the survey
+  ?`, buttons Cancel / OK (says "survey", tabs 1-2 say "review").
+- ❓ **Toast wording is still unverified** (assumed `Survey has been successfully submitted.` / `... deleted.`). The first run
+  prints the real texts as `[save]   toast: "..."` / `[cleanup]   toast: "..."` in the run log.
+- Shared page-object changes made for this tab: `Person` (office optional), `currentPeriod` hook, `fillForm` overridable,
+  save/delete wait for ANY toast (and log its text) so a new tab's wording never costs a 30s wait.
 
 ## Tab 3 — Officer Teamwork Survey
 Layout is different from tab 1. ❓ Awaiting screenshot.
@@ -468,6 +495,7 @@ and/or opportunities for growth."*; status bar `Chars: 0` / `Words: 0`; hidden `
   (global locators). Scope table/form locators to the active tab panel to avoid strict-mode violations.
 
 ## Change log
+- 2026-11-05 — Principal Teamwork Survey explored by live dump; notes above, tests `principal-survey.spec.ts` written (branch principal-teamwork-survey-ui-tests).
 - 2026-11-05 — Tab 2 (Practice Head Reviews) explored by live dump; notes above, tests `pa-head-reviews.spec.ts` written.
 - 2026-11-04 — First fully green run of tab 1 (42 passed). Recorded: cleanup root cause (table loads
   asynchronously), server-clock dates, delete API, stage-labelled comments, verified behaviours, run routine.

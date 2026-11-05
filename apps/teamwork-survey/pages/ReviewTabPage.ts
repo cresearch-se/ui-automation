@@ -1,5 +1,5 @@
 import { type Page, type Locator, type Request, type Response, expect } from '@playwright/test';
-import { type OfficeHead, MESSAGES, STAGE, currentReviewPeriod } from '../data/officeHeadReviews.data';
+import { STAGE, currentReviewPeriod } from '../data/officeHeadReviews.data';
 import { normalize, stamped } from '../utils/text';
 
 /**
@@ -16,7 +16,17 @@ import { normalize, stamped } from '../utils/text';
  *  - row icons have no accessible name → found by the svg `data-icon` inside the button.
  */
 export const COLUMN = { head: 0, office: 1, period: 2, comments: 3, date: 4, action: 5 } as const;
-export type ColumnIndex = (typeof COLUMN)[keyof typeof COLUMN];
+export type ColumnIndex = number; // tabs 1 and 2 use COLUMN above; the Principal survey has its own layout
+
+/**
+ * Who a review is about. `name` is the "Last, First" shown in the table's first column; `office` is the second part of
+ * the dropdown option (`Last, First - Office` / `- Practice Area`) and is absent where the option is just the name
+ * (Principal Teamwork Survey).
+ */
+export interface Person {
+  name: string;
+  office?: string;
+}
 
 export interface ReviewTabConfig {
   /** Route relative to the project baseURL (`.../reviews/`). */
@@ -32,10 +42,15 @@ export interface ReviewTabConfig {
   landingRoute?: string;
   /** Start of the inline "review already exists" text; defaults to the Office Head wording. */
   duplicateText?: string;
+  /** The review period every flow uses by default; defaults to Jan 01 – Dec 31 of the current year. */
+  currentPeriod?: () => string;
 }
 
 const EDIT_ICON = 'svg[data-icon="pen-to-square"]';
 const DELETE_ICON = 'svg[data-icon="trash-can"]';
+
+/** "Last, First" or "Last, First (Office)" for log lines. */
+const label = (person: Person) => `${person.name}${person.office ? ` (${person.office})` : ''}`;
 
 export class ReviewTabPage {
   readonly tabLinks: Locator;
@@ -228,12 +243,17 @@ export class ReviewTabPage {
   }
 
   /** Defaults to the current-year period; throws "Option not found" if the admin entered a wrong one. */
-  async selectReviewPeriod(period = currentReviewPeriod()) {
+  async selectReviewPeriod(period = this.currentPeriod()) {
     await this.chooseOption(this.reviewPeriodSelect, period);
   }
 
-  async selectPerson(person: OfficeHead) {
-    await this.chooseOption(this.personSelect, `${person.name} - ${person.office}`);
+  async selectPerson(person: Person) {
+    await this.chooseOption(this.personSelect, person.office ? `${person.name} - ${person.office}` : person.name);
+  }
+
+  /** The review period the flows use by default (the tab's own rule, else Jan 01 – Dec 31 of this year). */
+  protected currentPeriod(): string {
+    return this.config.currentPeriod?.() ?? currentReviewPeriod();
   }
 
   /** Replace the Comments editor content (Jodit contenteditable). */
@@ -249,12 +269,12 @@ export class ReviewTabPage {
   // ------------------------------------------------------------------ form: flows
 
   /** Fill the form and click Submit (no waiting on the outcome — tests assert the toast / row). */
-  async fillAndSubmit(person: OfficeHead, comments: string, period = currentReviewPeriod()) {
+  async fillAndSubmit(person: Person, comments: string, period = this.currentPeriod()) {
     await this.fillForm(person, comments, period);
     if (!(await this.submitIsEnabled())) {
       // Submit stays disabled while the "review already exists" prompt is up: an earlier cleanup missed a row.
       // Reload, clear the head again and retry once; the warning keeps the miss visible in the report.
-      console.warn(`[cleanup] Submit disabled for ${person.name} (${person.office}) — ${await this.visibleRowsSummary()}`);
+      console.warn(`[cleanup] Submit disabled for ${label(person)} — ${await this.visibleRowsSummary()}`);
       await this.goto();
       await this.removeExistingReviewsFor(person);
       await this.fillForm(person, comments, period);
@@ -262,8 +282,8 @@ export class ReviewTabPage {
         const prompt = await this.duplicateMessage.isVisible();
         throw new Error(
           (prompt
-            ? `A review already exists for ${person.name} (${person.office}) despite cleanup`
-            : `Submit stayed disabled for ${person.name} (${person.office})`) + ` — ${await this.visibleRowsSummary()}`,
+            ? `A review already exists for ${label(person)} despite cleanup`
+            : `Submit stayed disabled for ${label(person)}`) + ` — ${await this.visibleRowsSummary()}`,
         );
       }
     }
@@ -277,11 +297,15 @@ export class ReviewTabPage {
   async submit() {
     await this.logNetworkDuring(async () => {
       await this.submitButton.click();
-      await this.toast(MESSAGES.submitted).waitFor({ timeout: 30_000 }).catch(() => {});
+      // Any toast ends the wait (its wording differs per tab); tests assert the exact text. It is logged so the
+      // wording of a new tab shows up in the run log.
+      await this.toastAny.first().waitFor({ timeout: 30_000 }).catch(() => {});
+      const shown = await this.toastAny.first().innerText({ timeout: 2_000 }).catch(() => '');
+      if (shown) console.log(`[save]   toast: "${normalize(shown)}"`);
     }, 'save');
   }
 
-  private async fillForm(person: OfficeHead, comments: string, period: string) {
+  protected async fillForm(person: Person, comments: string, period: string) {
     await this.selectReviewPeriod(period);
     await this.selectPerson(person);
     await this.setComments(comments);
@@ -307,7 +331,7 @@ export class ReviewTabPage {
    * comment "<tag> created"; returns a row locator that keeps matching after the comment is edited (matches on
    * `tag`). Clears any existing review for that person first so the duplicate prompt can't interfere.
    */
-  async createReview(person: OfficeHead, tag: string): Promise<Locator> {
+  async createReview(person: Person, tag: string): Promise<Locator> {
     await this.removeExistingReviewsFor(person);
     await this.fillAndSubmit(person, stamped(tag, STAGE.created));
     await expect(this.rowWithText(stamped(tag, STAGE.created))).toHaveCount(1);
@@ -316,7 +340,7 @@ export class ReviewTabPage {
   }
 
   /** Re-select an existing period + person combo and accept the "edit this review?" prompt. */
-  async startEditViaDuplicate(person: OfficeHead, period = currentReviewPeriod()) {
+  async startEditViaDuplicate(person: Person, period = this.currentPeriod()) {
     await this.selectReviewPeriod(period);
     await this.selectPerson(person);
     await expect(this.duplicateMessage).toBeVisible();
@@ -383,13 +407,12 @@ export class ReviewTabPage {
   }
 
   /** Delete the person's current-period review(s) left over from earlier runs / manual testing. */
-  async removeExistingReviewsFor(person: OfficeHead) {
-    const existing = this.actionableRows
-      .filter({ hasText: person.name })
-      .filter({ hasText: person.office })
-      .filter({ hasText: currentReviewPeriod() });
+  async removeExistingReviewsFor(person: Person) {
+    let existing = this.actionableRows.filter({ hasText: person.name });
+    if (person.office) existing = existing.filter({ hasText: person.office });
+    existing = existing.filter({ hasText: this.currentPeriod() });
     console.log(
-      `[cleanup] ${person.name} (${person.office}): ${await this.rows.count()} rows on screen, ${await existing.count()} to delete`,
+      `[cleanup] ${label(person)}: ${await this.rows.count()} rows on screen, ${await existing.count()} to delete`,
     );
     await this.deleteWhilePresent(existing);
   }
@@ -413,7 +436,9 @@ export class ReviewTabPage {
         await this.deleteRow(rows.first());
         // The toast means the server confirmed the delete; without it the page can be left or closed while the
         // request is still pending and the row comes back.
-        await expect(this.toast(MESSAGES.deleted)).toBeVisible();
+        // Any toast counts here: the wording differs per tab ("Review ..." / "Survey ..."); tests assert it exactly.
+        await expect(this.toastAny.first()).toBeVisible();
+        console.log(`[cleanup]   toast: "${normalize(await this.toastAny.first().innerText())}"`);
         await expect(rows).toHaveCount(count - 1);
       });
       await this.dismissToasts();
