@@ -318,9 +318,42 @@ filter, pagination `30 / page`, full cycle for all 9 heads.
   saving an edit (no tests for these yet).
 - ❓ Cleanup: tests create data on staging — delete rows at the end (Delete flow) to stay re-runnable.
 
-## Tabs 2 & 4 (Practice Head Reviews, Principal Teamwork Survey)
-Described as "look alike the first tab" — presumably same form/table pattern with different
-dropdown label (Practice Head / Principal) and data. ❓ Awaiting details; do **not** assume identical.
+## Tab 2 — Practice Head Reviews ✅ (live dump 2026-11-05)
+Route `/reviews/paheadreview`. After login the app opens on tab 1, so tests land there first and **click the 2nd tab**.
+Same layout and behaviour as tab 1 (form + "My Submissions" table); differences:
+- **Form labels:** Review Period, **Practice Area Head**, Comments (hidden "Rating :" lingers in the DOM). Same
+  placeholder, "CHARS/WORDS" bar and Submit button; Cancel appears in edit mode only.
+- **The list is fixed: 20 practice heads**, option text `Last, First - Practice Area`, in this order:
+  Economics: Hatzitaskos, Kostis · Sancheti, Sachin | Antitrust and Competition: Colley, Liam · Saravia, Celeste ·
+  Tsai, Joanna | CFPL: Altuglu, Vildan · Hussain, Samid | Life Sciences: Kovacheva, Penka · Marriott, Zoya |
+  HealthCare: Older Aguilar, Dina · Salgado, Maria | Finance: Aganin, Sasha · Cao, Yan | Securities 10b-5/11: Gilley,
+  Sara · Lacerda, Filipe · Pandya, Shaama | Valuation, M&A and Bankruptcy: Barnes, Ronnie · Schneider, Frank ·
+  Schwartz, Allie · Zurek, Paul. (`data/paHeadReviews.data.ts`.)
+- **The Practice Area Head dropdown IS searchable** (typing "Hat" leaves 1 option; "Sch" should leave Schneider and
+  Schwartz). Tab 1's dropdown was not.
+- **Review Period options:** `January 01, 2026 - December 31, 2026` and `October 05, 2026 - October 12, 2026`.
+- **Table columns:** PA Head (sort+filter), Practice Area (sort+filter), Review Period (sort+filter), Review (neither),
+  Date Submitted (sort only), Action (neither). Same positions as tab 1, so the shared `COLUMN` indexes apply
+  (`COLUMN.office` = Practice Area, `COLUMN.comments` = Review). Page size `30 / page`.
+- **Column filters** list only values that have rows (PA Head shows `Last, First` only), have a search box
+  ("Search in filters") and Reset starts disabled.
+- **Validation:** `Review Period is required.` · `Practice Area Head is required.` · `Comments are required.`
+- **Duplicate prompt:** `A review already exists for the selected practice area head and period. Do you want to edit
+  this review?` with Yes / No; Submit is disabled while it is up.
+- **Delete:** popover title `Delete Review for the officer: <Last, First>`, text `Do you want to proceed to delete the
+  review ?`, buttons Cancel / OK.
+- ❓ Not yet verified on tab 2: the success/delete toast texts (assumed identical to tab 1), saving, editing, deleting.
+  The first full run of `pa-head-reviews.spec.ts` verifies them.
+- Cleanup: tests delete current-year reviews of the practice head they use (staging is a test environment), so the two
+  exploration rows (Altuglu, Sancheti) disappear on the first run.
+- **Virtual-list gotcha:** with 20 options only ~9 are in the DOM at once. After scrolling a dropdown to the top the
+  list must be allowed to redraw before reading it (`scrollListToTop` in ReviewTabPage), else the first rows are missed.
+- **Worker shutdown wait:** Playwright can wait 5 minutes at the end of a run ("worker process did not exit within
+  300000ms"); `$env:PWTEST_CHILD_PROCESS_TIMEOUT = "20000"` shortens it (internal setting, seen in
+  `node_modules/playwright/lib/runner/index.js`).
+
+## Tab 4 — Principal Teamwork Survey
+Described as "look alike the first tab". ❓ Awaiting details; do **not** assume identical.
 
 ## Tab 3 — Officer Teamwork Survey
 Layout is different from tab 1. ❓ Awaiting screenshot.
@@ -434,6 +467,7 @@ and/or opportunities for growth."*; status bar `Chars: 0` / `Words: 0`; hidden `
   (global locators). Scope table/form locators to the active tab panel to avoid strict-mode violations.
 
 ## Change log
+- 2026-11-05 — Tab 2 (Practice Head Reviews) explored by live dump; notes above, tests `pa-head-reviews.spec.ts` written.
 - 2026-11-04 — First fully green run of tab 1 (42 passed). Recorded: cleanup root cause (table loads
   asynchronously), server-clock dates, delete API, stage-labelled comments, verified behaviours, run routine.
   Staging confirmed as a test environment (OK to delete any current-year review of the 9 heads).
