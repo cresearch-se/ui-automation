@@ -18,7 +18,7 @@ import { normalize } from '../utils/text';
 const OUT = 'teamwork-dump';
 
 test('dump practice head reviews tab', async ({ page }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   fs.mkdirSync(OUT, { recursive: true });
   // Reads (innerText etc.) wait for the element for as long as the test runs unless told otherwise: cap them, so one
   // missing element costs 15s and becomes an ERROR line instead of hanging the whole dump.
@@ -101,17 +101,21 @@ test('dump practice head reviews tab', async ({ page }) => {
 
   for (const header of ['PA Head', 'Practice Area', 'Review Period']) {
     await attempt(`Filter options: ${header}`, async () => {
+      await tab.goto(); // fresh page: no panel left open by the previous section
       await tab.openFilter(header);
       await tab.filterOptions().first().waitFor({ timeout: 10_000 }).catch(() => {});
       const options = (await tab.filterOptions().allInnerTexts()).map(normalize);
       const reset = await tab.filterButton('Reset').isDisabled();
       const search = await tab.filterSearch().isVisible();
-      await page.keyboard.press('Escape');
-      return [`search box: ${search}; Reset disabled: ${reset}`, ...options];
+      // Close by clicking away (Escape did not reliably close the panel), then confirm it is gone.
+      await page.mouse.click(2, 2);
+      const closed = await tab.filterPopup.waitFor({ state: 'hidden', timeout: 5_000 }).then(() => true, () => false);
+      return [`search box: ${search}; Reset disabled: ${reset}; panel closed afterwards: ${closed}`, ...options];
     });
   }
 
   await attempt('Validation messages after an empty Submit', async () => {
+    await tab.goto();
     await tab.submitButton.click();
     await page.waitForTimeout(1000);
     return (await tab.form.locator('.ant-form-item-explain-error').allInnerTexts()).map(normalize);
@@ -126,7 +130,13 @@ test('dump practice head reviews tab', async ({ page }) => {
       const option = (await tab.readPracticeHeadOptions()).find((o) => o.startsWith(firstPerson));
       if (!option) return `no dropdown option starts with "${firstPerson}"`;
       await tab.selectReviewPeriod();
-      await tab.chooseOption(tab.personSelect, option);
+      try {
+        await tab.chooseOption(tab.personSelect, option);
+      } catch (e) {
+        // Say what the dropdown really showed, so the failure can be explained.
+        const visible = (await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option').allInnerTexts()).map(normalize);
+        return [`chooseOption failed: ${(e as Error).message.split('\n')[0]}`, `wanted: ${option}`, `visible options (${visible.length}): ${visible.join(' ; ')}`];
+      }
       await page.waitForTimeout(1500);
       const prompt = page.getByText(/already exists/i).first();
       const text = (await prompt.isVisible()) ? normalize(await prompt.innerText()) : '(no prompt shown)';
